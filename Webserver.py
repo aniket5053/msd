@@ -56,7 +56,7 @@ PAGE = """\
 </head>
 <body>
     <h1>BeeCam - Live Stream</h1>
-    <img src="bee_pic.jpeg" class="bee-icon" alt="Bee Icon">
+    <img src="bee_pic.jpg" class="bee-icon" alt="Bee Icon">
     <p id="red-count">Red Objects Detected: 0</p>
     <img src="stream.mjpg" width="640" height="480" />
 </body>
