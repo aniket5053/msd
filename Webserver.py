@@ -56,7 +56,6 @@ PAGE = """\
 </head>
 <body>
     <h1>BeeCam - Live Stream</h1>
-    <img src="bee_image.jpg" class="bee-icon" alt="Bee Icon">
     <p id="red-count">Red Objects Detected: 0</p>
     <img src="stream.mjpg" width="640" height="480" />
 </body>
@@ -76,6 +75,7 @@ class StreamingOutput(io.BufferedIOBase):
 
     def set_red_count(self, count):
         self.red_count = count
+        print(f"Red Objects Count Updated: {self.red_count}")  # Print the red object count in terminal
 
     def get_red_count(self):
         return self.red_count
@@ -172,6 +172,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             count_data = {'count': output.get_red_count()}
+            print(f"Fetching Red Objects Count: {count_data['count']}")  # Print the fetched red object count
             self.wfile.write(bytes(str(count_data).replace("'", '"'), 'utf-8'))  # Convert dict to JSON string
         else:
             self.send_error(404)
