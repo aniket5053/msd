@@ -14,7 +14,35 @@ from picamera2.outputs import FileOutput
 PAGE = """\
 <html>
 <head>
-<title>picamera2 MJPEG streaming demo</title>
+<title>BeeCam - Picamera2 MJPEG Streaming</title>
+<style>
+    body {
+        background-color: #FFF8E1;
+        font-family: 'Arial', sans-serif;
+        text-align: center;
+        color: #3E2723;
+    }
+    h1 {
+        font-size: 3em;
+        color: #F57F17;
+        font-family: 'Comic Sans MS', sans-serif;
+    }
+    #red-count {
+        font-size: 1.5em;
+        margin-top: 20px;
+        font-weight: bold;
+        color: #F44336;
+    }
+    .bee-icon {
+        width: 50px;
+        height: 50px;
+        margin-top: 20px;
+    }
+    img {
+        border: 5px solid #F57F17;
+        border-radius: 15px;
+    }
+</style>
 <script type="text/javascript">
     function updateRedCount() {
         fetch('/count')
@@ -27,12 +55,14 @@ PAGE = """\
 </script>
 </head>
 <body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
-<p id="red-count">Red Objects Detected: 0</p>
-<img src="stream.mjpg" width="640" height="480" />
+    <h1>BeeCam - Live Stream</h1>
+    <img src="https://www.pngkit.com/png/full/44-441467_bee-icon-png-transparent-bee-icon-png.png" class="bee-icon" alt="Bee Icon">
+    <p id="red-count">Red Objects Detected: 0</p>
+    <img src="stream.mjpg" width="640" height="480" />
 </body>
 </html>
 """
+
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
