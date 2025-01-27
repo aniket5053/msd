@@ -86,11 +86,11 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
                     # Define the red color range in HSV
-                    lower_red = np.array([0, 120, 70])
+                    lower_red = np.array([0, 100, 100])
                     upper_red = np.array([10, 255, 255])
                     mask1 = cv2.inRange(hsv, lower_red, upper_red)
 
-                    lower_red = np.array([170, 120, 70])
+                    lower_red = np.array([170, 70, 50])
                     upper_red = np.array([180, 255, 255])
                     mask2 = cv2.inRange(hsv, lower_red, upper_red)
 
