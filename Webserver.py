@@ -34,8 +34,8 @@ PAGE = """\
         color: #F44336;
     }
     .bee-icon {
-        width: 50px;
-        height: 50px;
+        width: 100px;
+        height: 100px;
         margin-top: 20px;
     }
     img {
@@ -56,12 +56,12 @@ PAGE = """\
 </head>
 <body>
     <h1>BeeCam - Live Stream</h1>
+    <img src="bee_image.jpg" class="bee-icon" alt="Bee Icon">
     <p id="red-count">Red Objects Detected: 0</p>
     <img src="stream.mjpg" width="640" height="480" />
 </body>
 </html>
 """
-
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
@@ -80,8 +80,9 @@ class StreamingOutput(io.BufferedIOBase):
     def get_red_count(self):
         return self.red_count
 
-
 class StreamingHandler(server.BaseHTTPRequestHandler):
+    is_streaming = False  # Flag to indicate if streaming is active
+
     def do_GET(self):
         if self.path == '/':
             self.send_response(301)
@@ -95,66 +96,76 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
         elif self.path == '/stream.mjpg':
-            self.send_response(200)
-            self.send_header('Age', 0)
-            self.send_header('Cache-Control', 'no-cache, private')
-            self.send_header('Pragma', 'no-cache')
-            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-            self.end_headers()
-            try:
-                while True:
-                    with output.condition:
-                        output.condition.wait()
-                        frame = output.frame
-                    
-                    # Convert the frame to numpy array for OpenCV processing
-                    np_frame = np.frombuffer(frame, dtype=np.uint8)
-                    img = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
+            if not StreamingHandler.is_streaming:  # Start streaming when first client connects
+                StreamingHandler.is_streaming = True
+                print("Streaming started...")  # Output to terminal when streaming starts
+                self.send_response(200)
+                self.send_header('Age', 0)
+                self.send_header('Cache-Control', 'no-cache, private')
+                self.send_header('Pragma', 'no-cache')
+                self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
+                self.end_headers()
 
-                    # Convert the image to HSV
-                    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+                try:
+                    while StreamingHandler.is_streaming:
+                        with output.condition:
+                            output.condition.wait()
+                            frame = output.frame
 
-                    # Define the red color range in HSV
-                    lower_red = np.array([0, 100, 100])
-                    upper_red = np.array([10, 255, 255])
-                    mask1 = cv2.inRange(hsv, lower_red, upper_red)
+                        # Convert the frame to numpy array for OpenCV processing
+                        np_frame = np.frombuffer(frame, dtype=np.uint8)
+                        img = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
 
-                    lower_red = np.array([170, 70, 50])
-                    upper_red = np.array([180, 255, 255])
-                    mask2 = cv2.inRange(hsv, lower_red, upper_red)
+                        # Convert the image to HSV
+                        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-                    # Combine the two masks to capture red from both ranges
-                    mask = mask1 | mask2
+                        # Define the red color range in HSV
+                        lower_red = np.array([0, 120, 70])
+                        upper_red = np.array([10, 255, 255])
+                        mask1 = cv2.inRange(hsv, lower_red, upper_red)
 
-                    # Find contours in the mask
-                    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        lower_red = np.array([170, 120, 70])
+                        upper_red = np.array([180, 255, 255])
+                        mask2 = cv2.inRange(hsv, lower_red, upper_red)
 
-                    # Draw rectangles around detected red regions
-                    red_count = 0
-                    for contour in contours:
-                        if cv2.contourArea(contour) > 500:  # Minimum area to avoid noise
-                            x, y, w, h = cv2.boundingRect(contour)
-                            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green rectangle
-                            red_count += 1  # Increment the red object count
+                        # Combine the two masks to capture red from both ranges
+                        mask = mask1 | mask2
 
-                    # Set the red count to be accessible
-                    output.set_red_count(red_count)
+                        # Find contours in the mask
+                        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                    # Encode the result to send as MJPEG stream
-                    _, encoded_frame = cv2.imencode('.jpg', img)
-                    frame = encoded_frame.tobytes()
+                        # Draw rectangles around detected red regions
+                        red_count = 0
+                        for contour in contours:
+                            if cv2.contourArea(contour) > 500:  # Minimum area to avoid noise
+                                x, y, w, h = cv2.boundingRect(contour)
+                                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green rectangle
+                                red_count += 1  # Increment the red object count
 
-                    # Send the processed frame
-                    self.wfile.write(b'--FRAME\r\n')
-                    self.send_header('Content-Type', 'image/jpeg')
-                    self.send_header('Content-Length', len(frame))
-                    self.end_headers()
-                    self.wfile.write(frame)
-                    self.wfile.write(b'\r\n')
-            except Exception as e:
-                logging.warning(
-                    'Removed streaming client %s: %s',
-                    self.client_address, str(e))
+                        # Set the red count to be accessible
+                        output.set_red_count(red_count)
+
+                        # Encode the result to send as MJPEG stream
+                        _, encoded_frame = cv2.imencode('.jpg', img)
+                        frame = encoded_frame.tobytes()
+
+                        # Send the processed frame
+                        self.wfile.write(b'--FRAME\r\n')
+                        self.send_header('Content-Type', 'image/jpeg')
+                        self.send_header('Content-Length', len(frame))
+                        self.end_headers()
+                        self.wfile.write(frame)
+                        self.wfile.write(b'\r\n')
+                except Exception as e:
+                    logging.warning(
+                        'Removed streaming client %s: %s',
+                        self.client_address, str(e))
+                finally:
+                    StreamingHandler.is_streaming = False  # Stop streaming when client disconnects
+                    print("Streaming stopped...")  # Output to terminal when streaming stops
+            else:
+                self.send_error(404)
+                self.end_headers()
         elif self.path == '/count':
             # Return the current red object count as JSON
             self.send_response(200)
@@ -166,11 +177,9 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_error(404)
             self.end_headers()
 
-
 class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
-
 
 picam2 = Picamera2()
 picam2.configure(picam2.create_video_configuration(main={"size": (640, 480)}))
