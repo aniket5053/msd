@@ -1,15 +1,10 @@
-# Rui Santos & Sara Santos - Random Nerd Tutorials
-# Complete project details at https://RandomNerdTutorials.com/raspberry-pi-mjpeg-streaming-web-server-picamera2/
-
-# Mostly copied from https://picamera.readthedocs.io/en/release-1.13/recipes2.html
-# Run this script, then point a web browser at http:<this-ip-address>:7123
-# Note: needs simplejpeg to be installed (pip3 install simplejpeg).
-
 import io
 import logging
 import socketserver
 from http import server
 from threading import Condition
+import cv2
+import numpy as np
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
@@ -63,6 +58,40 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     with output.condition:
                         output.condition.wait()
                         frame = output.frame
+                    
+                    # Convert the frame to numpy array for OpenCV processing
+                    np_frame = np.frombuffer(frame, dtype=np.uint8)
+                    img = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
+
+                    # Convert the image to HSV
+                    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+                    # Define the red color range in HSV
+                    lower_red = np.array([0, 120, 70])
+                    upper_red = np.array([10, 255, 255])
+                    mask1 = cv2.inRange(hsv, lower_red, upper_red)
+
+                    lower_red = np.array([170, 120, 70])
+                    upper_red = np.array([180, 255, 255])
+                    mask2 = cv2.inRange(hsv, lower_red, upper_red)
+
+                    # Combine the two masks to capture red from both ranges
+                    mask = mask1 | mask2
+
+                    # Find contours in the mask
+                    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                    # Draw rectangles around detected red regions
+                    for contour in contours:
+                        if cv2.contourArea(contour) > 500:  # Minimum area to avoid noise
+                            x, y, w, h = cv2.boundingRect(contour)
+                            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green rectangle
+
+                    # Encode the result to send as MJPEG stream
+                    _, encoded_frame = cv2.imencode('.jpg', img)
+                    frame = encoded_frame.tobytes()
+
+                    # Send the processed frame
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
                     self.send_header('Content-Length', len(frame))
