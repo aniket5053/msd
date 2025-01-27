@@ -5,6 +5,7 @@ from http import server
 from threading import Condition
 import cv2
 import numpy as np
+import time
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
@@ -14,9 +15,20 @@ PAGE = """\
 <html>
 <head>
 <title>picamera2 MJPEG streaming demo</title>
+<script type="text/javascript">
+    function updateRedCount() {
+        fetch('/count')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('red-count').innerText = 'Red Objects Detected: ' + data.count;
+        });
+    }
+    setInterval(updateRedCount, 500);  // Update the count every 500ms
+</script>
 </head>
 <body>
 <h1>Picamera2 MJPEG Streaming Demo</h1>
+<p id="red-count">Red Objects Detected: 0</p>
 <img src="stream.mjpg" width="640" height="480" />
 </body>
 </html>
@@ -26,11 +38,18 @@ class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
         self.frame = None
         self.condition = Condition()
+        self.red_count = 0  # Initialize red count
 
     def write(self, buf):
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
+
+    def set_red_count(self, count):
+        self.red_count = count
+
+    def get_red_count(self):
+        return self.red_count
 
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
@@ -82,10 +101,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
                     # Draw rectangles around detected red regions
+                    red_count = 0
                     for contour in contours:
                         if cv2.contourArea(contour) > 500:  # Minimum area to avoid noise
                             x, y, w, h = cv2.boundingRect(contour)
                             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green rectangle
+                            red_count += 1  # Increment the red object count
+
+                    # Set the red count to be accessible
+                    output.set_red_count(red_count)
 
                     # Encode the result to send as MJPEG stream
                     _, encoded_frame = cv2.imencode('.jpg', img)
@@ -102,6 +126,13 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 logging.warning(
                     'Removed streaming client %s: %s',
                     self.client_address, str(e))
+        elif self.path == '/count':
+            # Return the current red object count as JSON
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            count_data = {'count': output.get_red_count()}
+            self.wfile.write(bytes(str(count_data).replace("'", '"'), 'utf-8'))  # Convert dict to JSON string
         else:
             self.send_error(404)
             self.end_headers()
