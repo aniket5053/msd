@@ -1,120 +1,123 @@
 import io
 import logging
 import socketserver
+import json
+import time
+from collections import deque
 from http import server
 from threading import Condition
 import cv2
 import numpy as np
-import time
 import board
 import adafruit_sht4x
-import json
-from collections import deque
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
+# Initialize sensor
 sht = adafruit_sht4x.SHT4x(board.I2C())
-data_queue = deque(maxlen=100)  # Store last 100 readings for sliding window
 
-PAGE = """
+# Store last 100 sensor readings
+sensor_data = deque(maxlen=100)
+
+PAGE = """\
 <html>
 <head>
-<title>Live Environment Monitoring</title>
+<title>BeeCam - Picamera2 MJPEG Streaming</title>
 <style>
     body {
-        background-color: #f4f4f4;
+        background-color: #FFF8E1;
         font-family: 'Arial', sans-serif;
         text-align: center;
-        color: #333;
+        color: #3E2723;
     }
     h1 {
-        font-size: 2.5em;
-        color: #333;
+        font-size: 3em;
+        color: #F57F17;
+        font-family: 'Comic Sans MS', sans-serif;
     }
-    #data-container {
+    #red-count {
+        font-size: 1.5em;
         margin-top: 20px;
-        font-size: 1.2em;
         font-weight: bold;
+        color: #F44336;
     }
     canvas {
-        width: 90%;
-        max-width: 800px;
+        max-width: 90%;
         margin-top: 20px;
-        border: 1px solid #ccc;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    let tempData = [];
-    let humidityData = [];
+<script type="text/javascript">
+    let sensorChart;
     let labels = [];
-    let chart;
+    let temperatureData = [];
+    let humidityData = [];
 
-    function updateSensors() {
+    function updateRedCount() {
+        fetch('/count')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('red-count').innerText = 'Red Objects Detected: ' + data.count;
+        });
+    }
+
+    function updateGraph() {
         fetch('/sensors')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('temperature').innerText = 'Temperature: ' + data.temperature + ' °C';
-            document.getElementById('humidity').innerText = 'Humidity: ' + data.humidity + ' %';
-            
-            if (labels.length >= 100) {
-                labels.shift();
-                tempData.shift();
-                humidityData.shift();
-            }
-            labels.push(new Date().toLocaleTimeString());
-            tempData.push(data.temperature);
-            humidityData.push(data.humidity);
-            
-            chart.update();
-        });
-    }
+            labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
+            temperatureData = data.map(d => d.temperature);
+            humidityData = data.map(d => d.humidity);
 
-    function initChart() {
-        const ctx = document.getElementById('sensorChart').getContext('2d');
-        chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Temperature (°C)',
-                        data: tempData,
-                        borderColor: 'red',
-                        fill: false
+            if (!sensorChart) {
+                const ctx = document.getElementById('sensorChart').getContext('2d');
+                sensorChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Temperature (°C)',
+                                data: temperatureData,
+                                borderColor: 'red',
+                                fill: false
+                            },
+                            {
+                                label: 'Humidity (%)',
+                                data: humidityData,
+                                borderColor: 'blue',
+                                fill: false
+                            }
+                        ]
                     },
-                    {
-                        label: 'Humidity (%)',
-                        data: humidityData,
-                        borderColor: 'blue',
-                        fill: false
+                    options: {
+                        responsive: true,
+                        scales: {
+                            x: { title: { display: true, text: 'Time' } },
+                            y: { title: { display: true, text: 'Value' } }
+                        }
                     }
-                ]
-            },
-            options: {
-                responsive: true,
-                animation: { duration: 500 }, // Faster updates
-                scales: {
-                    x: { type: 'linear', position: 'bottom' }
-                }
+                });
+            } else {
+                sensorChart.data.labels = labels;
+                sensorChart.data.datasets[0].data = temperatureData;
+                sensorChart.data.datasets[1].data = humidityData;
+                sensorChart.update();
             }
         });
     }
 
-    window.onload = function() {
-        initChart();
-        setInterval(updateSensors, 1000);
-    };
+    setInterval(updateRedCount, 500);
+    setInterval(updateGraph, 2000);
 </script>
 </head>
 <body>
-    <h1>Live Environment Monitoring</h1>
-    <p id="temperature">Temperature: --</p>
-    <p id="humidity">Humidity: --</p>
-    <img src="stream.mjpg" width="640" height="480" />
+    <h1>BeeCam - Live Stream</h1>
+    <p id="red-count">Red Objects Detected: 0</p>
     <canvas id="sensorChart"></canvas>
+    <img src="stream.mjpg" width="640" height="480" />
 </body>
 </html>
 """
@@ -123,13 +126,22 @@ class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
         self.frame = None
         self.condition = Condition()
+        self.red_count = 0  
 
     def write(self, buf):
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
 
+    def set_red_count(self, count):
+        self.red_count = count
+
+    def get_red_count(self):
+        return self.red_count
+
 class StreamingHandler(server.BaseHTTPRequestHandler):
+    is_streaming = False  
+
     def do_GET(self):
         if self.path == '/':
             self.send_response(301)
@@ -143,31 +155,72 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
         elif self.path == '/stream.mjpg':
-            self.send_response(200)
-            self.send_header('Cache-Control', 'no-cache')
-            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-            self.end_headers()
-            try:
-                while True:
-                    with output.condition:
-                        output.condition.wait()
-                        frame = output.frame
-                    self.wfile.write(b'--FRAME\r\n')
-                    self.send_header('Content-Type', 'image/jpeg')
-                    self.send_header('Content-Length', len(frame))
-                    self.end_headers()
-                    self.wfile.write(frame)
-                    self.wfile.write(b'\r\n')
-            except Exception as e:
-                logging.warning('Streaming client disconnected: %s', str(e))
-        elif self.path == '/sensors':
-            temperature = round(sht.temperature, 2)
-            humidity = round(sht.relative_humidity, 2)
-            data_queue.append({'temperature': temperature, 'humidity': humidity})
+            if not StreamingHandler.is_streaming:
+                StreamingHandler.is_streaming = True
+                print("Streaming started...")
+                self.send_response(200)
+                self.send_header('Age', 0)
+                self.send_header('Cache-Control', 'no-cache, private')
+                self.send_header('Pragma', 'no-cache')
+                self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
+                self.end_headers()
+
+                try:
+                    while StreamingHandler.is_streaming:
+                        with output.condition:
+                            output.condition.wait()
+                            frame = output.frame
+
+                        np_frame = np.frombuffer(frame, dtype=np.uint8)
+                        img = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
+                        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+                        lower_red1 = np.array([0, 120, 70])
+                        upper_red1 = np.array([10, 255, 255])
+                        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+
+                        lower_red2 = np.array([170, 120, 70])
+                        upper_red2 = np.array([180, 255, 255])
+                        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+
+                        mask = mask1 | mask2
+                        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                        red_count = sum(1 for contour in contours if cv2.contourArea(contour) > 500)
+                        output.set_red_count(red_count)
+
+                        _, encoded_frame = cv2.imencode('.jpg', img)
+                        frame = encoded_frame.tobytes()
+
+                        self.wfile.write(b'--FRAME\r\n')
+                        self.send_header('Content-Type', 'image/jpeg')
+                        self.send_header('Content-Length', len(frame))
+                        self.end_headers()
+                        self.wfile.write(frame)
+                        self.wfile.write(b'\r\n')
+                except Exception as e:
+                    logging.warning('Removed streaming client %s: %s', self.client_address, str(e))
+                finally:
+                    StreamingHandler.is_streaming = False
+                    print("Streaming stopped...")
+            else:
+                self.send_error(404)
+                self.end_headers()
+        elif self.path == '/count':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'temperature': temperature, 'humidity': humidity}).encode('utf-8'))
+            count_data = {'count': output.get_red_count()}
+            self.wfile.write(json.dumps(count_data).encode('utf-8'))
+        elif self.path == '/sensors':
+            temp = round(sht.temperature, 3)
+            hum = round(sht.relative_humidity, 3)
+            sensor_data.append({"time": time.time(), "temperature": temp, "humidity": hum})
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(list(sensor_data)).encode('utf-8'))
         else:
             self.send_error(404)
             self.end_headers()
