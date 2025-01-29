@@ -94,9 +94,24 @@ PAGE = """\
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
+                        animation: {
+                            duration: 0
+                        },
                         scales: {
                             x: { title: { display: true, text: 'Time' } },
                             y: { title: { display: true, text: 'Value' } }
+                        },
+                        plugins: {
+                            zoom: {
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x'
+                                },
+                                limits: {
+                                    x: { min: 0 }
+                                }
+                            }
                         }
                     }
                 });
@@ -110,7 +125,7 @@ PAGE = """\
     }
 
     setInterval(updateRedCount, 500);
-    setInterval(updateGraph, 2000);
+    setInterval(updateGraph, 500);
 </script>
 </head>
 <body>
@@ -154,64 +169,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', len(content))
             self.end_headers()
             self.wfile.write(content)
-        elif self.path == '/stream.mjpg':
-            if not StreamingHandler.is_streaming:
-                StreamingHandler.is_streaming = True
-                print("Streaming started...")
-                self.send_response(200)
-                self.send_header('Age', 0)
-                self.send_header('Cache-Control', 'no-cache, private')
-                self.send_header('Pragma', 'no-cache')
-                self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-                self.end_headers()
-
-                try:
-                    while StreamingHandler.is_streaming:
-                        with output.condition:
-                            output.condition.wait()
-                            frame = output.frame
-
-                        np_frame = np.frombuffer(frame, dtype=np.uint8)
-                        img = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
-                        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-                        lower_red1 = np.array([0, 120, 70])
-                        upper_red1 = np.array([10, 255, 255])
-                        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
-
-                        lower_red2 = np.array([170, 120, 70])
-                        upper_red2 = np.array([180, 255, 255])
-                        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-
-                        mask = mask1 | mask2
-                        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                        red_count = sum(1 for contour in contours if cv2.contourArea(contour) > 500)
-                        output.set_red_count(red_count)
-
-                        _, encoded_frame = cv2.imencode('.jpg', img)
-                        frame = encoded_frame.tobytes()
-
-                        self.wfile.write(b'--FRAME\r\n')
-                        self.send_header('Content-Type', 'image/jpeg')
-                        self.send_header('Content-Length', len(frame))
-                        self.end_headers()
-                        self.wfile.write(frame)
-                        self.wfile.write(b'\r\n')
-                except Exception as e:
-                    logging.warning('Removed streaming client %s: %s', self.client_address, str(e))
-                finally:
-                    StreamingHandler.is_streaming = False
-                    print("Streaming stopped...")
-            else:
-                self.send_error(404)
-                self.end_headers()
-        elif self.path == '/count':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            count_data = {'count': output.get_red_count()}
-            self.wfile.write(json.dumps(count_data).encode('utf-8'))
         elif self.path == '/sensors':
             temp = round(sht.temperature, 3)
             hum = round(sht.relative_humidity, 3)
