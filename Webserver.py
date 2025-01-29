@@ -6,11 +6,14 @@ from threading import Condition
 import cv2
 import numpy as np
 import time
+import board
+import adafruit_sht4x
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
+sht = adafruit_sht4x.SHT4x(board.I2C())
 PAGE = """\
 <html>
 <head>
@@ -51,12 +54,25 @@ PAGE = """\
             document.getElementById('red-count').innerText = 'Red Objects Detected: ' + data.count;
         });
     }
+
+    function updateSensors() {
+        fetch('/sensors')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('temperature').innerText = 'Temperature: ' + data.temperature + ' °C';
+            document.getElementById('humidity').innerText = 'Humidity: ' + data.humidity + ' %';
+        });
+    }
+
     setInterval(updateRedCount, 500);  // Update the count every 500ms
+    setInterval(updateSensors, 2000); // Update the sensors every 2 seconds
 </script>
 </head>
 <body>
     <h1>BeeCam - Live Stream</h1>
     <p id="red-count">Red Objects Detected: 0</p>
+    <p id="temperature">Temperature: </p>
+    <p id="humidity">Humidity: </p>
     <img src="stream.mjpg" width="640" height="480" />
 </body>
 </html>
@@ -174,6 +190,14 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             count_data = {'count': output.get_red_count()}
             print(f"Fetching Red Objects Count: {count_data['count']}")  # Print the fetched red object count
             self.wfile.write(bytes(str(count_data).replace("'", '"'), 'utf-8'))  # Convert dict to JSON string
+        elif self.path == '/sensors':
+            # Return the current temperature and humidity as JSON
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            sensors_data = {'temperature': sht.temperature, 'humidity': sht.relative_humidity}
+            print(f"Fetching Sensors Data: Temperature = {sensors_data['temperature']} °C, Humidity = {sensors_data['humidity']} %")  # Print the fetched sensor data
+            self.wfile.write(bytes(str(sensors_data).replace("'", '"'), 'utf-8'))  # Convert dict to JSON string
         else:
             self.send_error(404)
             self.end_headers()
