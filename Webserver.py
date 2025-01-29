@@ -59,7 +59,7 @@ PAGE = """\
         fetch('/sensors')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('temperature').innerText = 'Temperature: ' + data.temperature + ' °C';
+            document.getElementById('temperature').innerText = 'Temperature: ' + data.temperature + ' C';
             document.getElementById('humidity').innerText = 'Humidity: ' + data.humidity + ' %';
         });
     }
@@ -91,7 +91,7 @@ class StreamingOutput(io.BufferedIOBase):
 
     def set_red_count(self, count):
         self.red_count = count
-        print(f"Red Objects Count Updated: {self.red_count}")  # Print the red object count in terminal
+        # print(f"Red Objects Count Updated: {self.red_count}")  # Print the red object count in terminal
 
     def get_red_count(self):
         return self.red_count
@@ -195,7 +195,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            sensors_data = {'temperature': sht.temperature, 'humidity': sht.relative_humidity}
+            sensors_data = {'temperature': round(sht.temperature, 3), 'humidity': round(sht.relative_humidity, 3)}
             print(f"Fetching Sensors Data: Temperature = {sensors_data['temperature']} °C, Humidity = {sensors_data['humidity']} %")  # Print the fetched sensor data
             self.wfile.write(bytes(str(sensors_data).replace("'", '"'), 'utf-8'))  # Convert dict to JSON string
         else:
