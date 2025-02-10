@@ -32,40 +32,46 @@ PAGE = """\
         font-family: 'Roboto', sans-serif;
         background-color: #f8f9fa;
         margin: 0;
-        padding: 20px;
+        padding: 15px;
     }
     .container {
-        max-width: 1300px;
+        max-width: 1600px;
         margin: 0 auto;
     }
     .dashboard {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 30px;
+        gap: 40px;
         margin-top: 30px;
     }
     .card {
         background: white;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+        min-height: 600px;
     }
     h1 {
         color: #2c3e50;
         font-weight: 700;
         margin-bottom: 0;
-        font-size: 2.2em;
+        font-size: 2.5em;
+        margin-bottom: 25px;
     }
     .status-bar {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 25px;
+        margin-bottom: 35px;
+        gap: 25px;
     }
     .metric {
         background: #e9ecef;
-        padding: 12px 25px;
-        border-radius: 8px;
+        padding: 20px 35px;
+        border-radius: 12px;
         font-weight: 700;
+        font-size: 1.2em;
+        flex-grow: 1;
+        text-align: center;
     }
     .metric.red {
         background: #fff5f5;
@@ -73,11 +79,17 @@ PAGE = """\
     }
     canvas {
         width: 100% !important;
-        height: 400px !important;
+        height: 550px !important;
     }
     .video-container {
-        border-radius: 12px;
+        border-radius: 15px;
         overflow: hidden;
+        height: 100%;
+    }
+    .video-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
