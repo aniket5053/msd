@@ -80,6 +80,14 @@ PAGE = """\
         background: white;
         border-radius: 8px;
         border: 1px solid #eee;
+        padding: 15px;
+    }
+    .chartjs-tooltip {
+        background: rgba(50, 50, 50, 0.9) !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     .video-container {
         background: #f5f5f5;
@@ -143,6 +151,12 @@ PAGE = """\
                 },
                 plugins: {
                     tooltip: {
+                        backgroundColor: 'rgba(40, 40, 40, 0.95)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255,255,255,0.2)',
+                        borderWidth: 1,
+                        padding: 12,
                         callbacks: {
                             title: (context) => {
                                 const date = new Date(context[0].parsed.x);
@@ -177,17 +191,41 @@ PAGE = """\
                         ticks: {
                             source: 'data',
                             autoSkip: false,
-                            color: '#666',
+                            color: '#444',
+                            font: { size: 12 },
                             callback: (value, index, ticks) => {
-                                return index === ticks.length - 1 ? new Date(value).toLocaleTimeString() : '';
+                                return (index % 5 === 0 || index === ticks.length - 1) ? 
+                                    new Date(value).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
+                                    '';
                             }
                         },
-                        grid: { color: '#f5f5f5' },
-                        bounds: 'ticks'
+                        grid: { 
+                            color: '#eee',
+                            drawTicks: false
+                        },
+                        bounds: 'ticks',
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            color: '#666',
+                            font: { size: 14 }
+                        }
                     },
                     y: {
-                        grid: { color: '#f5f5f5' },
-                        ticks: { color: '#666' }
+                        grid: { 
+                            color: '#eee',
+                            drawTicks: false
+                        },
+                        ticks: { 
+                            color: '#444',
+                            font: { size: 12 }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Value',
+                            color: '#666',
+                            font: { size: 14 }
+                        }
                     }
                 }
             }
