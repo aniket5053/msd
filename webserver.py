@@ -46,7 +46,7 @@ PAGE = """\
     }
     .dashboard {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 3fr 2fr;
         height: calc(100% - 80px);
         gap: 15px;
         padding: 15px;
@@ -77,6 +77,7 @@ PAGE = """\
     #sensorChart {
         width: 100% !important;
         height: 100% !important;
+        min-width: 500px;
         background: white;
         border-radius: 8px;
         border: 1px solid #eee;
@@ -96,6 +97,7 @@ PAGE = """\
         height: 100%;
         border: 1px solid #eee;
         position: relative;
+        min-width: 600px;
     }
     .video-feed {
         width: 100%;
@@ -145,6 +147,14 @@ PAGE = """\
             },
             options: {
                 maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        left: 20,
+                        right: 20,
+                        top: 15,
+                        bottom: 25
+                    }
+                },
                 interaction: {
                     mode: 'nearest',
                     intersect: false
@@ -201,7 +211,8 @@ PAGE = """\
                         },
                         grid: { 
                             color: '#eee',
-                            drawTicks: false
+                            drawTicks: false,
+                            drawBorder: true
                         },
                         bounds: 'ticks',
                         title: {
@@ -214,7 +225,8 @@ PAGE = """\
                     y: {
                         grid: { 
                             color: '#eee',
-                            drawTicks: false
+                            drawTicks: false,
+                            drawBorder: true
                         },
                         ticks: { 
                             color: '#444',
