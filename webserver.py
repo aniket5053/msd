@@ -28,12 +28,95 @@ PAGE = """\
 <title>BeeCam - Environmental Monitoring</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 <style>
-    /* ... (keep existing styles the same) ... */
+    html, body {
+        margin: 10px;
+        padding: 0;
+        height: calc(100% - 20px);
+        font-family: 'Roboto', sans-serif;
+        background-color: #fafafa;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .dashboard {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: calc(100% - 80px);
+        gap: 15px;
+        padding: 15px;
+    }
+    h1 {
+        color: #2c3e50;
+        margin: 15px;
+        font-size: 2em;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #eee;
+    }
+    .status-bar {
+        display: flex;
+        gap: 15px;
+        padding: 0 15px;
+    }
+    .metric {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 10px 20px;
+        border-radius: 8px;
+        color: #333;
+        font-size: 1.1em;
+        border: 1px solid #eee;
+    }
+    .metric.red { color: #d32f2f; border-color: #ffcdd2; }
+    .metric.green { color: #388e3c; border-color: #c8e6c9; }
+    .metric.blue { color: #1976d2; border-color: #bbdefb; }
+    #sensorChart {
+        width: 100% !important;
+        height: 100% !important;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #eee;
+    }
+    .video-container {
+        background: #f5f5f5;
+        border-radius: 8px;
+        overflow: hidden;
+        height: 100%;
+        border: 1px solid #eee;
+        position: relative;
+    }
+    .video-feed {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 <script>
     let sensorChart;
+
+    function updateMetrics() {
+        fetch('/sensors')
+        .then(r => r.json())
+        .then(data => {
+            if(data.length > 0) {
+                const latest = data[data.length - 1];
+                document.getElementById('temp').textContent = latest.temperature.toFixed(1);
+                document.getElementById('hum').textContent = latest.humidity.toFixed(1);
+            }
+        });
+        
+        fetch('/count')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('red-count').textContent = data.count;
+        });
+    }
 
     function initChart() {
         const ctx = document.getElementById('sensorChart').getContext('2d');
@@ -44,44 +127,21 @@ PAGE = """\
                     label: 'Temperature (°C)',
                     borderColor: '#d32f2f',
                     backgroundColor: '#d32f2f22',
-                    tension: 0.2,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: '#d32f2f'
+                    tension: 0.2
                 },{
                     label: 'Humidity (%)',
                     borderColor: '#1976d2',
                     backgroundColor: '#1976d222',
-                    tension: 0.2,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: '#1976d2'
+                    tension: 0.2
                 }]
             },
             options: {
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'nearest',
-                    intersect: false
-                },
                 scales: {
                     x: {
                         type: 'time',
-                        time: {
-                            unit: 'minute',
-                            displayFormats: {
-                                minute: 'HH:mm',
-                                hour: 'HH:mm'
-                            },
-                            tooltipFormat: 'HH:mm:ss'
-                        },
                         grid: { color: '#f5f5f5' },
-                        ticks: {
-                            color: '#666',
-                            maxRotation: 0,
-                            autoSkip: true,
-                            maxTicksLimit: 10
-                        }
+                        ticks: { color: '#666' }
                     },
                     y: {
                         grid: { color: '#f5f5f5' },
@@ -89,23 +149,7 @@ PAGE = """\
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#333' } },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        displayColors: true,
-                        callbacks: {
-                            title: (context) => {
-                                const date = new Date(context[0].parsed.x);
-                                return date.toLocaleTimeString();
-                            },
-                            label: (context) => {
-                                const label = context.dataset.label;
-                                const value = context.parsed.y;
-                                return `${label}: ${value.toFixed(1)}`;
-                            }
-                        }
-                    }
+                    legend: { labels: { color: '#333' } }
                 }
             }
         });
@@ -115,35 +159,34 @@ PAGE = """\
         fetch('/sensors')
         .then(r => r.json())
         .then(data => {
-            sensorChart.data.datasets[0].data = data.map(d => ({
-                x: d.time * 1000, 
-                y: d.temperature
-            }));
-            sensorChart.data.datasets[1].data = data.map(d => ({
-                x: d.time * 1000, 
-                y: d.humidity
-            }));
-            
-            // Only keep latest 50 points for better visibility
-            if(data.length > 50) {
-                sensorChart.data.datasets.forEach(dataset => {
-                    dataset.data = dataset.data.slice(-50);
-                });
-            }
-            
+            sensorChart.data.datasets[0].data = data.map(d => ({x: d.time*1000, y: d.temperature}));
+            sensorChart.data.datasets[1].data = data.map(d => ({x: d.time*1000, y: d.humidity}));
             sensorChart.update();
         });
     }
 
     window.addEventListener('load', () => {
         initChart();
-        setInterval(updateMetrics, 10000);
-        setInterval(updateChart, 10000);
+        setInterval(updateMetrics, 1000);
+        setInterval(updateChart, 10000); // Update chart every 10 seconds
     });
 </script>
 </head>
 <body>
-    <!-- Keep existing HTML structure -->
+    <div class="container">
+        <h1>BeeCam Environmental Monitor</h1>
+        <div class="status-bar">
+            <div class="metric green">Temp: <span id="temp">-</span>°C</div>
+            <div class="metric blue">Humidity: <span id="hum">-</span>%</div>
+            <div class="metric red">Objects: <span id="red-count">0</span></div>
+        </div>
+        <div class="dashboard">
+            <div class="video-container">
+                <img class="video-feed" src="stream.mjpg" />
+            </div>
+            <canvas id="sensorChart"></canvas>
+        </div>
+    </div>
 </body>
 </html>
 """
@@ -155,25 +198,36 @@ class StreamingOutput(io.BufferedIOBase):
         self.red_count = 0
 
     def write(self, buf):
-        # Color detection processing
+        # Process frame for red object detection
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
+            # Convert to HSV color space
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             
-            # Red color range
-            lower_red = np.array([0, 120, 70])
-            upper_red = np.array([10, 255, 255])
-            mask1 = cv2.inRange(hsv, lower_red, upper_red)
+            # Define red color ranges
+            lower_red1 = np.array([0, 120, 70])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 120, 70])
+            upper_red2 = np.array([180, 255, 255])
             
-            lower_red = np.array([170, 120, 70])
-            upper_red = np.array([180, 255, 255])
-            mask2 = cv2.inRange(hsv, lower_red, upper_red)
-            
+            # Create masks and combine
+            mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+            mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
             full_mask = cv2.bitwise_or(mask1, mask2)
-            contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             
-            self.red_count = len([c for c in contours if cv2.contourArea(c) > 50])
-            print(self.red_count)
+            # Find contours and draw boxes
+            contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            self.red_count = 0
+            
+            for contour in contours:
+                if cv2.contourArea(contour) > 500:  # Minimum area threshold
+                    self.red_count += 1
+                    x, y, w, h = cv2.boundingRect(contour)
+                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+            
+            # Encode modified image back to JPEG
+            _, jpeg = cv2.imencode('.jpg', img)
+            buf = jpeg.tobytes()
 
         with self.condition:
             self.frame = buf
@@ -250,7 +304,7 @@ def sensor_loop():
                 })
         except Exception as e:
             logging.error("Sensor error: %s", e)
-        time.sleep(10)  # Update every 10 seconds
+        time.sleep(10)  # Update sensor data every 10 seconds
 
 # Initialize camera
 picam2 = Picamera2()
