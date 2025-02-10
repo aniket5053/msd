@@ -29,29 +29,34 @@ PAGE = """\
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 <style>
     html, body {
-        margin: 0;
+        margin: 10px;
         padding: 0;
-        height: 100%;
-        overflow: hidden;
+        height: calc(100% - 20px);
         font-family: 'Roboto', sans-serif;
-        background-color: #1a1a1a;
+        background-color: #f5f5f5;
     }
     .container {
         display: flex;
         flex-direction: column;
-        height: 100vh;
+        height: 100%;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .dashboard {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        height: calc(100vh - 80px);
-        gap: 10px;
-        padding: 10px;
+        height: calc(100% - 80px);
+        gap: 15px;
+        padding: 15px;
     }
     h1 {
-        color: #ffffff;
+        color: #2c3e50;
         margin: 15px;
         font-size: 2em;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #eee;
     }
     .status-bar {
         display: flex;
@@ -59,26 +64,29 @@ PAGE = """\
         padding: 0 15px;
     }
     .metric {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.05);
         padding: 10px 20px;
         border-radius: 8px;
-        color: white;
+        color: #333;
         font-size: 1.1em;
+        border: 1px solid #eee;
     }
-    .metric.red { color: #ff4444; }
-    .metric.green { color: #44ff44; }
-    .metric.blue { color: #4444ff; }
+    .metric.red { color: #d32f2f; border-color: #ffcdd2; }
+    .metric.green { color: #388e3c; border-color: #c8e6c9; }
+    .metric.blue { color: #1976d2; border-color: #bbdefb; }
     #sensorChart {
         width: 100% !important;
         height: 100% !important;
-        background: #2a2a2a;
+        background: white;
         border-radius: 8px;
+        border: 1px solid #eee;
     }
     .video-container {
-        background: #000;
+        background: #fafafa;
         border-radius: 8px;
         overflow: hidden;
         height: 100%;
+        border: 1px solid #eee;
     }
     .video-feed {
         width: 100%;
@@ -116,13 +124,13 @@ PAGE = """\
             data: {
                 datasets: [{
                     label: 'Temperature (°C)',
-                    borderColor: '#ff4444',
-                    backgroundColor: '#ff444433',
+                    borderColor: '#d32f2f',
+                    backgroundColor: '#d32f2f22',
                     tension: 0.2
                 },{
                     label: 'Humidity (%)',
-                    borderColor: '#4444ff',
-                    backgroundColor: '#4444ff33',
+                    borderColor: '#1976d2',
+                    backgroundColor: '#1976d222',
                     tension: 0.2
                 }]
             },
@@ -131,16 +139,16 @@ PAGE = """\
                 scales: {
                     x: {
                         type: 'time',
-                        grid: { color: '#404040' },
-                        ticks: { color: '#fff' }
+                        grid: { color: '#f5f5f5' },
+                        ticks: { color: '#666' }
                     },
                     y: {
-                        grid: { color: '#404040' },
-                        ticks: { color: '#fff' }
+                        grid: { color: '#f5f5f5' },
+                        ticks: { color: '#666' }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#fff' } }
+                    legend: { labels: { color: '#333' } }
                 }
             }
         });
@@ -158,8 +166,8 @@ PAGE = """\
 
     window.addEventListener('load', () => {
         initChart();
-        setInterval(updateMetrics, 1000);
-        setInterval(updateChart, 1000);
+        setInterval(updateMetrics, 10000);
+        setInterval(updateChart, 10000);
     });
 </script>
 </head>
@@ -189,12 +197,28 @@ class StreamingOutput(io.BufferedIOBase):
         self.red_count = 0
 
     def write(self, buf):
+        # Color detection processing
+        img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is not None:
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            
+            # Red color range
+            lower_red = np.array([0, 120, 70])
+            upper_red = np.array([10, 255, 255])
+            mask1 = cv2.inRange(hsv, lower_red, upper_red)
+            
+            lower_red = np.array([170, 120, 70])
+            upper_red = np.array([180, 255, 255])
+            mask2 = cv2.inRange(hsv, lower_red, upper_red)
+            
+            full_mask = cv2.bitwise_or(mask1, mask2)
+            contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            
+            self.red_count = len([c for c in contours if cv2.contourArea(c) > 500])
+
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
-
-    def set_red_count(self, count):
-        self.red_count = count
 
     def get_red_count(self):
         return self.red_count
@@ -267,7 +291,7 @@ def sensor_loop():
                 })
         except Exception as e:
             logging.error("Sensor error: %s", e)
-        time.sleep(1)
+        time.sleep(10)  # Update every 10 seconds
 
 # Initialize camera
 picam2 = Picamera2()
