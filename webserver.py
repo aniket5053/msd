@@ -176,7 +176,7 @@ PAGE = """\
             type: 'line',
             data: {
                 datasets: [{
-                    label: 'Temperature (°C)',
+                    label: 'Temperature (F)',
                     borderColor: '#FFB347',
                     backgroundColor: gradientTemp,
                     tension: 0.3,
@@ -287,7 +287,7 @@ PAGE = """\
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10M15.5,10A2.5,2.5 0 0,1 18,12.5A2.5,2.5 0 0,1 15.5,15A2.5,2.5 0 0,1 13,12.5A2.5,2.5 0 0,1 15.5,10M8.5,5A2.5,2.5 0 0,1 11,7.5A2.5,2.5 0 0,1 8.5,10A2.5,2.5 0 0,1 6,7.5A2.5,2.5 0 0,1 8.5,5M15.5,5A2.5,2.5 0 0,1 18,7.5A2.5,2.5 0 0,1 15.5,10A2.5,2.5 0 0,1 13,7.5A2.5,2.5 0 0,1 15.5,5M12,2C14.5,2 16.75,2.89 18.5,4.38C17.12,5.14 16,6.05 15,7L12,4L9,7C8,6.05 6.88,5.14 5.5,4.38C7.25,2.89 9.5,2 12,2M12,22C9.5,22 7.25,21.11 5.5,19.62C6.88,18.86 8,17.95 9,17L12,20L15,17C16,17.95 17.12,18.86 18.5,19.62C16.75,21.11 14.5,22 12,22Z"/>
                     </svg>
-                    <span id="temp">-</span>°C
+                    <span id="temp">-</span>F
                 </div>
                 <div class="metric blue">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -414,6 +414,7 @@ def sensor_loop():
     while True:
         try:
             temp = round(sht.temperature, 3)
+            temp = temp * 9/5 + 32  # Convert to Fahrenheit
             hum = round(sht.relative_humidity, 3)
             with data_lock:
                 if (not sensor_data or 
