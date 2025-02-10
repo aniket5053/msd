@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeCam Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #FFA000;
+            --secondary-color: #FFE082;
+            --background: #FFF8E1;
+            --text-dark: #3E2723;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-container {
+            height: 300px;
+        }
+
+        #videoFeed {
+            width: 100%;
+            border-radius: 10px;
+            border: 3px solid var(--primary-color);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: var(--secondary-color);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐝 BeeCam Monitoring Dashboard</h1>
+    <div class="dashboard">
+        <div class="card">
+            <img id="videoFeed" src="stream.mjpg" width="640" height="480">
+        </div>
+        
+        <div class="card">
+            <div class="chart-container">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box">
+                <h3>Temperature</h3>
+                <p id="temperature">-- °C</p>
+            </div>
+            <div class="stat-box">
+                <h3>Humidity</h3>
+                <p id="humidity">-- %</p>
+            </div>
+            <div class="stat-box">
+                <h3>Red Objects</h3>
+                <p id="red-count">--</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize chart
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Temperature (°C)',
+                    borderColor: '#FFA000',
+                    data: [],
+                    yAxisID: 'y'
+                }, {
+                    label: 'Humidity (%)',
+                    borderColor: '#1976D2',
+                    data: [],
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'minute'
+                        }
+                    },
+                    y: {
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)'
+                        }
+                    },
+                    y1: {
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Humidity (%)'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update functions
+        async function updateChart() {
+            const response = await fetch('/graph-data');
+            const data = await response.json();
+            
+            chart.data.datasets[0].data = data.map(d => ({
+                x: d.timestamp,
+                y: d.temperature
+            }));
+            
+            chart.data.datasets[1].data = data.map(d => ({
+                x: d.timestamp,
+                y: d.humidity
+            }));
+            
+            chart.update();
+        }
+
+        function updateSensors() {
+            fetch('/sensors')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('temperature').textContent = `${data.temperature} °C`;
+                document.getElementById('humidity').textContent = `${data.humidity} %`;
+            });
+        }
+
+        function updateRedCount() {
+            fetch('/count')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('red-count').textContent = data.count;
+            });
+        }
+
+        // Update intervals
+        setInterval(updateChart, 2000);
+        setInterval(updateSensors, 1000);
+        setInterval(updateRedCount, 500);
+        
+        // Initial update
+        updateChart();
+        updateSensors();
+        updateRedCount();
+    </script>
+</body>
+</html>
