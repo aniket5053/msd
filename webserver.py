@@ -25,98 +25,127 @@ data_lock = Lock()
 PAGE = """\
 <html>
 <head>
-<title>BeeCam - Environmental Monitoring</title>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+<title>BeeCam Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+    :root {
+        --primary: #2c3e50;
+        --secondary: #3498db;
+        --success: #27ae60;
+        --danger: #e74c3c;
+        --background: #f8f9fa;
+        --card-bg: #ffffff;
+    }
+
     html, body {
         margin: 0;
         padding: 0;
         height: 100%;
-        font-family: 'Roboto', sans-serif;
-        background-color: #fafafa;
-        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+        background-color: var(--background);
     }
-    .container {
+
+    .dashboard {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        height: 100vh;
+        padding: 24px;
+        box-sizing: border-box;
+    }
+
+    .card {
+        background: var(--card-bg);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .video-card {
+        grid-column: 1 / 2;
         display: flex;
         flex-direction: column;
-        height: 100vh;
+        overflow: hidden;
     }
-    .video-section {
-        height: 60vh;
-        border-bottom: 2px solid #e0e0e0;
+
+    .metrics-card {
+        grid-column: 2 / 3;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 24px;
+    }
+
+    .video-container {
+        flex: 1;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
         position: relative;
     }
-    .graph-section {
-        height: 40vh;
-        padding: 15px;
-    }
-    h1 {
-        color: #2c3e50;
-        margin: 15px;
-        font-size: 1.8em;
-        position: absolute;
-        z-index: 1;
-    }
-    .status-bar {
-        position: absolute;
-        top: 15px;
-        right: 15px;
-        display: flex;
-        gap: 15px;
-        z-index: 1;
-    }
-    .metric {
-        background: rgba(255, 255, 255, 0.9);
-        padding: 8px 15px;
-        border-radius: 6px;
-        color: #333;
-        font-size: 1em;
-        border: 1px solid #eee;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .metric.red { color: #d32f2f; }
-    .metric.green { color: #388e3c; }
-    .metric.blue { color: #1976d2; }
-    #sensorChart {
-        width: 100% !important;
-        height: 100% !important;
-        background: white;
-    }
+
     .video-feed {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
     }
+
+    .status-bar {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .metric {
+        padding: 16px 24px;
+        border-radius: 12px;
+        background: rgba(45, 156, 219, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .metric-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .metric.red {
+        background: rgba(231, 76, 60, 0.1);
+        color: var(--danger);
+    }
+
+    .metric.green {
+        background: rgba(39, 174, 96, 0.1);
+        color: var(--success);
+    }
+
+    .metric.blue {
+        background: rgba(52, 152, 219, 0.1);
+        color: var(--secondary);
+    }
+
+    .metric-value {
+        font-weight: 600;
+        font-size: 1.2em;
+    }
+
     .chart-container {
-        height: calc(100% - 30px);
-        margin-top: 15px;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #eee;
+        height: 100%;
+        min-height: 300px;
+    }
+
+    h1 {
+        margin: 0 0 24px 0;
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 1.5em;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 <script>
     let sensorChart;
-
-    function updateMetrics() {
-        fetch('/sensors')
-        .then(r => r.json())
-        .then(data => {
-            if(data.length > 0) {
-                const latest = data[data.length - 1];
-                document.getElementById('temp').textContent = latest.temperature.toFixed(1);
-                document.getElementById('hum').textContent = latest.humidity.toFixed(1);
-            }
-        });
-        
-        fetch('/count')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('red-count').textContent = data.count;
-        });
-    }
 
     function initChart() {
         const ctx = document.getElementById('sensorChart').getContext('2d');
@@ -125,115 +154,117 @@ PAGE = """\
             data: {
                 datasets: [{
                     label: 'Temperature (°C)',
-                    borderColor: '#d32f2f',
-                    backgroundColor: '#d32f2f22',
-                    tension: 0.2,
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.3,
+                    borderWidth: 2,
                     pointRadius: 3
                 },{
                     label: 'Humidity (%)',
-                    borderColor: '#1976d2',
-                    backgroundColor: '#1976d222',
-                    tension: 0.2,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.3,
+                    borderWidth: 2,
                     pointRadius: 3
                 }]
             },
             options: {
                 maintainAspectRatio: false,
                 interaction: {
-                    mode: 'point',
-                    intersect: true
+                    mode: 'nearest',
+                    intersect: false
                 },
                 plugins: {
                     tooltip: {
-                        backgroundColor: 'rgba(40, 40, 40, 0.95)',
+                        backgroundColor: 'rgba(44, 62, 80, 0.95)',
                         titleColor: '#fff',
                         bodyColor: '#fff',
-                        borderColor: 'rgba(255,255,255,0.2)',
+                        borderColor: 'rgba(255,255,255,0.1)',
                         borderWidth: 1,
                         padding: 12,
                         callbacks: {
-                            title: (context) => {
-                                const date = new Date(context[0].parsed.x);
-                                return date.toLocaleTimeString();
-                            },
-                            label: (context) => {
-                                return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`;
-                            }
+                            title: (context) => new Date(context[0].parsed.x).toLocaleTimeString(),
+                            label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`
                         }
                     },
-                    legend: { 
-                        labels: { 
-                            color: '#333',
+                    legend: {
+                        labels: {
+                            color: var(--primary),
                             boxWidth: 12,
                             padding: 16
-                        } 
-                    },
-                    zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, mode: 'x' }
+                        }
                     }
                 },
                 scales: {
                     x: {
                         type: 'time',
-                        time: {
-                            tooltipFormat: 'HH:mm:ss'
-                        },
-                        grid: { 
-                            color: '#f5f5f5',
-                            drawTicks: false
-                        },
+                        grid: { color: 'rgba(0,0,0,0.05)' },
                         ticks: {
-                            color: '#666',
+                            color: 'rgba(0,0,0,0.6)',
                             maxRotation: 0,
-                            autoSkip: true,
-                            maxTicksLimit: 8
+                            autoSkip: true
                         }
                     },
                     y: {
-                        grid: { 
-                            color: '#f5f5f5',
-                            drawTicks: false
-                        },
-                        ticks: { 
-                            color: '#666',
-                            padding: 8
-                        }
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: { color: 'rgba(0,0,0,0.6)' }
                     }
                 }
             }
         });
     }
 
-    function updateChart() {
+    function updateData() {
         fetch('/sensors')
-        .then(r => r.json())
-        .then(data => {
-            sensorChart.data.datasets[0].data = data.map(d => ({x: d.time*1000, y: d.temperature}));
-            sensorChart.data.datasets[1].data = data.map(d => ({x: d.time*1000, y: d.humidity}));
-            sensorChart.update();
-        });
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('temp').textContent = data.length ? data[data.length-1].temperature.toFixed(1) : '-';
+                document.getElementById('hum').textContent = data.length ? data[data.length-1].humidity.toFixed(1) : '-';
+                
+                sensorChart.data.datasets[0].data = data.map(d => ({x: d.time*1000, y: d.temperature}));
+                sensorChart.data.datasets[1].data = data.map(d => ({x: d.time*1000, y: d.humidity}));
+                sensorChart.update();
+            });
+
+        fetch('/count')
+            .then(r => r.json())
+            .then(data => document.getElementById('red-count').textContent = data.count);
     }
 
     window.addEventListener('load', () => {
         initChart();
-        setInterval(updateMetrics, 1000);
-        setInterval(updateChart, 10000);
+        setInterval(updateData, 10000);
+        setInterval(() => fetch('/count').then(r => r.json()).then(data => {
+            document.getElementById('red-count').textContent = data.count
+        }), 1000);
     });
 </script>
 </head>
 <body>
-    <div class="container">
-        <div class="video-section">
-            <h1>BeeCam Monitoring</h1>
+    <div class="dashboard">
+        <div class="card video-card">
+            <h1>Live Camera Feed</h1>
             <div class="status-bar">
-                <div class="metric green">Temp: <span id="temp">-</span>°C</div>
-                <div class="metric blue">Humidity: <span id="hum">-</span>%</div>
-                <div class="metric red">Objects: <span id="red-count">0</span></div>
+                <div class="metric green">
+                    <span class="metric-value" id="temp">-</span>
+                    <span>°C</span>
+                </div>
+                <div class="metric blue">
+                    <span class="metric-value" id="hum">-</span>
+                    <span>% RH</span>
+                </div>
+                <div class="metric red">
+                    <span class="metric-value" id="red-count">0</span>
+                    <span>Objects</span>
+                </div>
             </div>
-            <img class="video-feed" src="stream.mjpg" />
+            <div class="video-container">
+                <img class="video-feed" src="stream.mjpg" />
+            </div>
         </div>
-        <div class="graph-section">
+        
+        <div class="card metrics-card">
+            <h1>Environmental Trends</h1>
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
@@ -250,32 +281,29 @@ class StreamingOutput(io.BufferedIOBase):
         self.red_count = 0
 
     def write(self, buf):
-        # Process frame for red object detection
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             
-            # Red color ranges
-            lower_red1 = np.array([0, 120, 70])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 120, 70])
-            upper_red2 = np.array([180, 255, 255])
+            # Red color detection
+            lower_red = np.array([0, 120, 70])
+            upper_red = np.array([10, 255, 255])
+            mask1 = cv2.inRange(hsv, lower_red, upper_red)
             
-            mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
-            mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+            lower_red = np.array([170, 120, 70])
+            upper_red = np.array([180, 255, 255])
+            mask2 = cv2.inRange(hsv, lower_red, upper_red)
+            
             full_mask = cv2.bitwise_or(mask1, mask2)
-            
-            # Find and draw contours
             contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            self.red_count = 0
             
+            self.red_count = 0
             for contour in contours:
                 if cv2.contourArea(contour) > 500:
                     self.red_count += 1
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
-            
-            # Encode modified image
+
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
 
