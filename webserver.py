@@ -29,80 +29,70 @@ PAGE = """\
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 <style>
     html, body {
-        margin: 10px;
+        margin: 0;
         padding: 0;
-        height: calc(100% - 20px);
+        height: 100%;
         font-family: 'Roboto', sans-serif;
         background-color: #fafafa;
+        overflow: hidden;
     }
     .container {
         display: flex;
         flex-direction: column;
-        height: 100%;
-        border: 2px solid #e0e0e0;
-        border-radius: 10px;
-        background: white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        height: 100vh;
     }
-    .dashboard {
-        display: grid;
-        grid-template-columns: 3fr 2fr;
-        height: calc(100% - 80px);
-        gap: 15px;
+    .video-section {
+        height: 60vh;
+        border-bottom: 2px solid #e0e0e0;
+        position: relative;
+    }
+    .graph-section {
+        height: 40vh;
         padding: 15px;
     }
     h1 {
         color: #2c3e50;
         margin: 15px;
-        font-size: 2em;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #eee;
+        font-size: 1.8em;
+        position: absolute;
+        z-index: 1;
     }
     .status-bar {
+        position: absolute;
+        top: 15px;
+        right: 15px;
         display: flex;
         gap: 15px;
-        padding: 0 15px;
+        z-index: 1;
     }
     .metric {
-        background: rgba(0, 0, 0, 0.05);
-        padding: 10px 20px;
-        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px 15px;
+        border-radius: 6px;
         color: #333;
-        font-size: 1.1em;
+        font-size: 1em;
         border: 1px solid #eee;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .metric.red { color: #d32f2f; border-color: #ffcdd2; }
-    .metric.green { color: #388e3c; border-color: #c8e6c9; }
-    .metric.blue { color: #1976d2; border-color: #bbdefb; }
+    .metric.red { color: #d32f2f; }
+    .metric.green { color: #388e3c; }
+    .metric.blue { color: #1976d2; }
     #sensorChart {
         width: 100% !important;
         height: 100% !important;
-        min-width: 500px;
         background: white;
-        border-radius: 8px;
-        border: 1px solid #eee;
-        padding: 15px;
-    }
-    .chartjs-tooltip {
-        background: rgba(50, 50, 50, 0.9) !important;
-        color: white !important;
-        border-radius: 4px !important;
-        padding: 8px 12px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .video-container {
-        background: #f5f5f5;
-        border-radius: 8px;
-        overflow: hidden;
-        height: 100%;
-        border: 1px solid #eee;
-        position: relative;
-        min-width: 600px;
     }
     .video-feed {
         width: 100%;
         height: 100%;
         object-fit: cover;
+    }
+    .chart-container {
+        height: calc(100% - 30px);
+        margin-top: 15px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #eee;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -137,27 +127,21 @@ PAGE = """\
                     label: 'Temperature (°C)',
                     borderColor: '#d32f2f',
                     backgroundColor: '#d32f2f22',
-                    tension: 0.2
+                    tension: 0.2,
+                    pointRadius: 3
                 },{
                     label: 'Humidity (%)',
                     borderColor: '#1976d2',
                     backgroundColor: '#1976d222',
-                    tension: 0.2
+                    tension: 0.2,
+                    pointRadius: 3
                 }]
             },
             options: {
                 maintainAspectRatio: false,
-                layout: {
-                    padding: {
-                        left: 20,
-                        right: 20,
-                        top: 15,
-                        bottom: 25
-                    }
-                },
                 interaction: {
-                    mode: 'nearest',
-                    intersect: false
+                    mode: 'point',
+                    intersect: true
                 },
                 plugins: {
                     tooltip: {
@@ -173,16 +157,17 @@ PAGE = """\
                                 return date.toLocaleTimeString();
                             },
                             label: (context) => {
-                                const label = context.dataset.label || '';
-                                return `${label}: ${context.parsed.y.toFixed(1)}`;
-                            },
-                            footer: (context) => {
-                                const index = context[0].dataIndex;
-                                return `Data point: ${index + 1}`;
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`;
                             }
                         }
                     },
-                    legend: { labels: { color: '#333' } },
+                    legend: { 
+                        labels: { 
+                            color: '#333',
+                            boxWidth: 12,
+                            padding: 16
+                        } 
+                    },
                     zoom: {
                         pan: { enabled: true, mode: 'x' },
                         zoom: { wheel: { enabled: true }, mode: 'x' }
@@ -192,51 +177,27 @@ PAGE = """\
                     x: {
                         type: 'time',
                         time: {
-                            displayFormats: {
-                                minute: 'HH:mm',
-                                hour: 'HH:mm'
-                            },
                             tooltipFormat: 'HH:mm:ss'
                         },
-                        ticks: {
-                            source: 'data',
-                            autoSkip: false,
-                            color: '#444',
-                            font: { size: 12 },
-                            callback: (value, index, ticks) => {
-                                return (index % 5 === 0 || index === ticks.length - 1) ? 
-                                    new Date(value).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
-                                    '';
-                            }
-                        },
                         grid: { 
-                            color: '#eee',
-                            drawTicks: false,
-                            drawBorder: true
+                            color: '#f5f5f5',
+                            drawTicks: false
                         },
-                        bounds: 'ticks',
-                        title: {
-                            display: true,
-                            text: 'Time',
+                        ticks: {
                             color: '#666',
-                            font: { size: 14 }
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 8
                         }
                     },
                     y: {
                         grid: { 
-                            color: '#eee',
-                            drawTicks: false,
-                            drawBorder: true
+                            color: '#f5f5f5',
+                            drawTicks: false
                         },
                         ticks: { 
-                            color: '#444',
-                            font: { size: 12 }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Value',
                             color: '#666',
-                            font: { size: 14 }
+                            padding: 8
                         }
                     }
                 }
@@ -263,17 +224,19 @@ PAGE = """\
 </head>
 <body>
     <div class="container">
-        <h1>BeeCam Environmental Monitor</h1>
-        <div class="status-bar">
-            <div class="metric green">Temp: <span id="temp">-</span>°C</div>
-            <div class="metric blue">Humidity: <span id="hum">-</span>%</div>
-            <div class="metric red">Objects: <span id="red-count">0</span></div>
-        </div>
-        <div class="dashboard">
-            <div class="video-container">
-                <img class="video-feed" src="stream.mjpg" />
+        <div class="video-section">
+            <h1>BeeCam Monitoring</h1>
+            <div class="status-bar">
+                <div class="metric green">Temp: <span id="temp">-</span>°C</div>
+                <div class="metric blue">Humidity: <span id="hum">-</span>%</div>
+                <div class="metric red">Objects: <span id="red-count">0</span></div>
             </div>
-            <canvas id="sensorChart"></canvas>
+            <img class="video-feed" src="stream.mjpg" />
+        </div>
+        <div class="graph-section">
+            <div class="chart-container">
+                <canvas id="sensorChart"></canvas>
+            </div>
         </div>
     </div>
 </body>
