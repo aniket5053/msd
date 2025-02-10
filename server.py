@@ -1,15 +1,12 @@
 from http import server
 import socketserver
 import logging
-from threading import Lock
 import json
 
 class WebServer:
     def __init__(self, camera_processor, sensor_manager):
         self.camera_processor = camera_processor
         self.sensor_manager = sensor_manager
-        self.streaming_active = False
-        self.streaming_lock = Lock()
 
     class StreamingHandler(server.BaseHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -22,29 +19,31 @@ class WebServer:
                 self.send_header('Location', '/index.html')
                 self.end_headers()
             elif self.path == '/index.html':
-                with open('templates/index.html', 'rb') as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html')
-                self.send_header('Content-Length', len(content))
-                self.end_headers()
-                self.wfile.write(content)
+                self.serve_static('templates/index.html', 'text/html')
             elif self.path == '/stream.mjpg':
-                with self.server_ref.streaming_lock:
-                    if not self.server_ref.streaming_active:
-                        self.server_ref.streaming_active = True
-                        self.handle_stream()
+                self.handle_stream()
             elif self.path == '/count':
                 self.send_json({'count': self.server_ref.camera_processor.output.get_red_count()})
             elif self.path == '/sensors':
                 temp, hum = self.server_ref.sensor_manager.read_sensors()
                 self.send_json({'temperature': temp, 'humidity': hum})
             elif self.path == '/graph-data':
-                history = self.server_ref.sensor_manager.get_history()
-                self.send_json(history)
+                self.send_json(self.server_ref.sensor_manager.get_history())
             else:
                 self.send_error(404)
                 self.end_headers()
+
+        def serve_static(self, path, content_type):
+            try:
+                with open(path, 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Content-Length', len(content))
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self.send_error(404)
 
         def send_json(self, data):
             self.send_response(200)
@@ -74,10 +73,7 @@ class WebServer:
                     self.wfile.write(processed_frame)
                     self.wfile.write(b'\r\n')
             except Exception as e:
-                logging.warning('Streaming client %s disconnected: %s', self.client_address, str(e))
-            finally:
-                with self.server_ref.streaming_lock:
-                    self.server_ref.streaming_active = False
+                logging.warning('Client disconnected: %s', str(e))
 
     class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
         allow_reuse_address = True
