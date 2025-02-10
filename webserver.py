@@ -214,7 +214,8 @@ class StreamingOutput(io.BufferedIOBase):
             full_mask = cv2.bitwise_or(mask1, mask2)
             contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             
-            self.red_count = len([c for c in contours if cv2.contourArea(c) > 500])
+            self.red_count = len([c for c in contours if cv2.contourArea(c) > 50])
+            print(self.red_count)
 
         with self.condition:
             self.frame = buf
