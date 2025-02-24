@@ -11,12 +11,20 @@ import cv2
 import numpy as np
 import board
 import adafruit_sht4x
+import adafruit_dotstar as dotstar
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
 # Initialize sensor
 sht = adafruit_sht4x.SHT4x(board.I2C())
+
+# Initialize LEDs and LED flag
+dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
+LED_enable = False
+LED_enable_time = 0
+# Enable LEDs dots[0 - 3] = (255, 255, 255) white light
+# Disable LEDs dots[0 - 3] = (0, 0, 0) no light
 
 # Store sensor readings with thread safety
 sensor_data = deque(maxlen=100)
