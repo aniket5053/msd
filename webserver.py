@@ -5,6 +5,7 @@ import json
 import time
 import threading
 import os
+import math
 from collections import deque
 from http import server
 from threading import Condition, Lock
@@ -18,7 +19,8 @@ from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
 # Create snapshots directory if it doesn't exist
-os.makedirs("snapshots", exist_ok=True)
+SNAPSHOT_ROOT = "snapshots"
+os.makedirs(SNAPSHOT_ROOT, exist_ok=True)
 
 # Initialize sensor
 sht = adafruit_sht4x.SHT4x(board.I2C())
@@ -308,13 +310,13 @@ PAGE = """\
             <div class="status-bar">
                 <div class="metric green">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10M15.5,10A2.5,2.5 0 0,1 18,12.5A2.5,2.5 0 0,1 15.5,15A2.5,2.5 0 0,1 13,12.5A2.5,2.5 0 0,1 15.5,10"/>
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10"/>
                     </svg>
                     <span id="temp">-</span>F
                 </div>
                 <div class="metric blue">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97M9.75,10A1.25,1.25 0 0,1 11,11.25A1.25,1.25 0 0,1 9.75,12.5A1.25,1.25 0 0,1 8.5,11.25A1.25,1.25 0 0,1 9.75,10M14.25,14.5A1.25,1.25 0 0,1 15.5,15.75A1.25,1.25 0 0,1 14.25,17A1.25,1.25 0 0,1 13,15.75A1.25,1.25 0 0,1 14.25,14.5Z"/>
+                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97M9.75,10A1.25,1.25 0 0,1 11,11.25A1.25,1.25 0 0,1 9.75,12.5A1.25,1.25 0 0,1 8.5,11.25A1.25,1.25 0 0,1 9.75,10"/>
                     </svg>
                     <span id="hum">-</span>%
                 </div>
@@ -446,32 +448,92 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Generate an HTML page that lists all snapshots
-            try:
-                files = sorted(os.listdir("snapshots"), reverse=True)
-            except Exception as e:
-                files = []
-            html_content = "<html><head><title>Snapshots</title></head><body>"
-            html_content += "<h1>Snapshots</h1>"
-            for file in files:
-                html_content += f'<div style="margin-bottom:20px;"><img src="/snapshot/{file}" style="max-width:100%;height:auto;"><p>{file}</p></div>'
+            # Build a page that lists each day's folder with averages and highlights outliers.
+            html_content = """<html>
+<head>
+  <title>Daily Snapshots</title>
+  <style>
+    body { font-family: 'Roboto Condensed', sans-serif; margin: 20px; background: #f9f9f9; }
+    h1 { text-align: center; }
+    .day-container { background: #fff; margin-bottom: 30px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .stats { margin-bottom: 10px; }
+    .snapshot { display: inline-block; margin: 10px; border: 3px solid #ccc; }
+    .snapshot.outlier { border-color: #e74c3c; }
+    .snapshot img { display: block; max-width: 200px; }
+    .snapshot p { margin: 5px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Daily Snapshots</h1>
+"""
+            # List daily folders
+            for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
+                day_folder = os.path.join(SNAPSHOT_ROOT, day)
+                if not os.path.isdir(day_folder):
+                    continue
+                # Read metadata file (if exists)
+                metadata_file = os.path.join(day_folder, "data.json")
+                if not os.path.exists(metadata_file):
+                    continue
+                try:
+                    with open(metadata_file, "r") as f:
+                        records = json.load(f)
+                except Exception as ex:
+                    records = []
+                if not records:
+                    continue
+                # Calculate averages and standard deviations
+                temps = [r["temperature"] for r in records]
+                hums = [r["humidity"] for r in records]
+                reds = [r["red_count"] for r in records]
+                avg_temp = sum(temps)/len(temps)
+                avg_hum = sum(hums)/len(hums)
+                avg_red = sum(reds)/len(reds)
+                std_temp = math.sqrt(sum((t - avg_temp)**2 for t in temps)/len(temps))
+                std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums))
+                std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds))
+                html_content += f"""<div class="day-container">
+  <h2>{day}</h2>
+  <div class="stats">
+    <strong>Averages:</strong> Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
+  </div>
+  <div class="snapshots">"""
+                # List snapshots in this day folder using metadata order (sorted by timestamp)
+                for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
+                    # Determine if any metric is an outlier (more than avg + 2*std)
+                    outlier = (
+                        rec["temperature"] > avg_temp + 2*std_temp or
+                        rec["humidity"] > avg_hum + 2*std_hum or
+                        rec["red_count"] > avg_red + 2*std_red
+                    )
+                    image_url = f"/snapshot/{day}/{rec['filename']}"
+                    html_content += f"""<div class="snapshot{' outlier' if outlier else ''}">
+  <img src="{image_url}">
+  <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
+     Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+</div>"""
+                html_content += "</div></div>"
             html_content += "</body></html>"
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
             self.end_headers()
             self.wfile.write(html_content.encode('utf-8'))
         elif self.path.startswith('/snapshot/'):
-            filename = self.path[len('/snapshot/'):]
-            file_path = os.path.join("snapshots", filename)
-            if os.path.exists(file_path):
-                self.send_response(200)
-                self.send_header('Content-Type', 'image/jpeg')
-                self.end_headers()
-                with open(file_path, 'rb') as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_error(404)
-                self.end_headers()
+            # Serve snapshots. Expecting URL of the form /snapshot/<day>/<filename>
+            parts = self.path.split('/')
+            if len(parts) >= 4:
+                day = parts[2]
+                filename = "/".join(parts[3:])
+                file_path = os.path.join(SNAPSHOT_ROOT, day, filename)
+                if os.path.exists(file_path):
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'image/jpeg')
+                    self.end_headers()
+                    with open(file_path, 'rb') as f:
+                        self.wfile.write(f.read())
+                    return
+            self.send_error(404)
+            self.end_headers()
         else:
             self.send_error(404)
             self.end_headers()
@@ -519,16 +581,16 @@ def snapshot_loop():
     Every 60 seconds, capture a snapshot from the camera stream,
     overlay sensor readings and red dot count, and save the image.
     The LED is used as a flash during the capture.
+    Also, append the sensor metadata for this snapshot into a daily JSON log.
     """
     global output
     while True:
         time.sleep(60)  # Wait one minute
-        # Turn on LED as flash
+        # Use LED as flash
         dots.fill((255, 255, 255))
-        time.sleep(0.1)  # Short flash duration
+        time.sleep(0.1)  # Flash duration
         with output.condition:
             frame_data = output.frame
-        # Turn off the flash
         dots.fill((0, 0, 0))
         if frame_data is None:
             continue
@@ -545,12 +607,37 @@ def snapshot_loop():
         red_count = output.get_red_count()
         overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        # Overlay the sensor data and timestamp onto the image
+        # Overlay sensor data and timestamp onto the image
         cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
         cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        # Save the snapshot with a timestamp in the filename
-        filename = f"snapshots/snapshot_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
-        cv2.imwrite(filename, img)
+        # Determine the daily folder based on current date (YYYYMMDD)
+        day_folder_name = time.strftime("%Y%m%d")
+        day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
+        os.makedirs(day_folder, exist_ok=True)
+        # Save the snapshot image
+        filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
+        file_path = os.path.join(day_folder, filename)
+        cv2.imwrite(file_path, img)
+        # Append metadata for this snapshot into a daily JSON file
+        metadata_file = os.path.join(day_folder, "data.json")
+        record = {
+            "timestamp": time.time(),
+            "temperature": latest_sensor["temperature"],
+            "humidity": latest_sensor["humidity"],
+            "red_count": red_count,
+            "filename": filename
+        }
+        if os.path.exists(metadata_file):
+            try:
+                with open(metadata_file, "r") as f:
+                    records = json.load(f)
+            except Exception:
+                records = []
+        else:
+            records = []
+        records.append(record)
+        with open(metadata_file, "w") as f:
+            json.dump(records, f)
 
 # Initialize camera with a square aspect ratio
 picam2 = Picamera2()
