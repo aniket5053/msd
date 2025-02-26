@@ -7,6 +7,7 @@ import threading
 import os
 import math
 from collections import deque
+from datetime import datetime
 from http import server
 from threading import Condition, Lock
 import cv2
@@ -37,7 +38,7 @@ streaming_start_time = time.time()  # streaming starts enabled
 sensor_data = deque(maxlen=100)
 data_lock = Lock()
 
-# Main page HTML with added style for the snapshots link
+# Main page HTML with theme styling and a nicely styled snapshots link
 PAGE = """\
 <html>
 <head>
@@ -86,14 +87,13 @@ PAGE = """\
     }
     
     .video-section {
-        width: 100%;
+        width: 90%;
         aspect-ratio: 1 / 1;
         background: var(--hive-brown);
         position: relative;
         overflow: hidden;
         border-radius: 16px;
         margin: 1rem auto;
-        width: 90%;
         box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     }
     
@@ -154,7 +154,8 @@ PAGE = """\
         width: 100% !important;
         height: 100% !important;
     }
-    /* Style for the snapshots link on the main page */
+    
+    /* Styled snapshots link */
     .snapshot-link {
          display: inline-block;
          padding: 10px 20px;
@@ -174,7 +175,6 @@ PAGE = """\
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 <script>
     let sensorChart;
-
     function updateMetrics() {
         fetch('/sensors')
         .then(r => r.json())
@@ -185,24 +185,20 @@ PAGE = """\
                 document.getElementById('hum').textContent = latest.humidity.toFixed(1);
             }
         });
-        
         fetch('/count')
         .then(r => r.json())
         .then(data => {
             document.getElementById('red-count').textContent = data.count;
         });
     }
-
     function initChart() {
         const ctx = document.getElementById('sensorChart').getContext('2d');
         const gradientTemp = ctx.createLinearGradient(0, 0, 0, 400);
         gradientTemp.addColorStop(0, 'rgba(255, 179, 71, 0.4)');
         gradientTemp.addColorStop(1, 'rgba(255, 179, 71, 0)');
-
         const gradientHum = ctx.createLinearGradient(0, 0, 0, 400);
         gradientHum.addColorStop(0, 'rgba(52, 152, 219, 0.4)');
         gradientHum.addColorStop(1, 'rgba(52, 152, 219, 0)');
-
         sensorChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -226,10 +222,7 @@ PAGE = """\
             },
             options: {
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'nearest',
-                    intersect: false
-                },
+                interaction: { mode: 'nearest', intersect: false },
                 plugins: {
                     tooltip: {
                         backgroundColor: 'rgba(107, 68, 35, 0.95)',
@@ -243,47 +236,22 @@ PAGE = """\
                                 const date = new Date(context[0].parsed.x);
                                 return date.toLocaleTimeString();
                             },
-                            label: (context) => {
-                                return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`;
-                            }
+                            label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`
                         }
                     },
-                    legend: { 
-                        labels: { 
-                            color: '#6B4423',
-                            font: { size: 14 },
-                            boxWidth: 20,
-                            padding: 20
-                        },
+                    legend: {
+                        labels: { color: '#6B4423', font: { size: 14 }, boxWidth: 20, padding: 20 },
                         position: 'top'
                     },
-                    zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, mode: 'x' }
-                    }
+                    zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true }, mode: 'x' } }
                 },
                 scales: {
-                    x: {
-                        type: 'time',
-                        time: { tooltipFormat: 'HH:mm' },
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: {
-                            color: '#6B4423',
-                            font: { size: 12 }
-                        }
-                    },
-                    y: {
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: { 
-                            color: '#6B4423',
-                            font: { size: 12 }
-                        }
-                    }
+                    x: { type: 'time', time: { tooltipFormat: 'HH:mm' }, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6B4423', font: { size: 12 } } },
+                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6B4423', font: { size: 12 } } }
                 }
             }
         });
     }
-
     function updateChart() {
         fetch('/sensors')
         .then(r => r.json())
@@ -293,8 +261,6 @@ PAGE = """\
             sensorChart.update();
         });
     }
-
-    // Toggle the stream on/off
     function toggleStream() {
         fetch('/toggle')
         .then(response => response.json())
@@ -303,7 +269,6 @@ PAGE = """\
             btn.textContent = data.streaming ? "Disable Stream" : "Enable Stream";
         });
     }
-
     window.addEventListener('load', () => {
         initChart();
         setInterval(updateMetrics, 1000);
@@ -316,44 +281,40 @@ PAGE = """\
         <div class="header">
             <div class="logo">
                 <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C14.65 2 17.2 3.05 19.07 4.93C20.95 6.8 22 9.35 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2M12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12C20 7.58 16.42 4 12 4M12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5M12 7.5C11.17 7.5 10.5 8.17 10.5 9C10.5 9.83 11.17 10.5 12 10.5C12.83 10.5 13.5 9.83 13.5 9C13.5 8.17 12.83 7.5 12 7.5M8.5 10C7.67 10 7 10.67 7 11.5C7 12.33 7.67 13 8.5 13C9.33 13 10 12.33 10 11.5C10 10.67 9.33 10 8.5 10M15.5 10C14.67 10 14 10.67 14 11.5C14 12.33 14.67 13 15.5 13C16.33 13 17 12.33 17 11.5C17 10.67 16.33 10 15.5 10M12 15C13.66 15 15 13.66 15 12H9C9 13.66 10.34 15 12 15Z"/>
+                    <path d="M12 2C14.65 2 17.2 3.05 19.07 4.93C20.95 6.8 22 9.35 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2"/>
                 </svg>
                 HiveHealth
             </div>
         </div>
-        
         <div class="video-section">
             <div class="status-bar">
                 <div class="metric green">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5"/>
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17"/>
                     </svg>
                     <span id="temp">-</span>F
                 </div>
                 <div class="metric blue">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97"/>
+                        <path d="M12,3.25C12,3.25 6,10 6,14"/>
                     </svg>
                     <span id="hum">-</span>%
                 </div>
                 <div class="metric red">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M17,15V13H7V15L12,20L17,15M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4"/>
+                        <path d="M12,2A10,10 0 0,0 2,12"/>
                     </svg>
                     <span id="red-count">0</span>
                 </div>
-                <!-- Toggle streaming button -->
                 <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
             <img class="video-feed" src="stream.mjpg" />
         </div>
-        
         <div class="graph-section">
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
         </div>
-        <!-- Styled link to view snapshots -->
         <div style="text-align:center; margin: 1rem;">
             <a href="/snapshots" target="_blank" class="snapshot-link">View Snapshots</a>
         </div>
@@ -369,7 +330,6 @@ class StreamingOutput(io.BufferedIOBase):
         self.red_count = 0
 
     def write(self, buf):
-        # Process frame for red object detection
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -460,30 +420,115 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Build snapshots page with centered images and centered modal.
+            # Build snapshots page with main theme styling and formatted day titles.
             html_content = """<html>
 <head>
   <title>Daily Snapshots</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Honeybee&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Roboto Condensed', sans-serif; margin: 20px; background: #f9f9f9; }
-    h1 { text-align: center; }
-    .day-container { background: #fff; margin-bottom: 30px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .stats { margin-bottom: 10px; text-align: center; }
-    .snapshots { display: flex; flex-wrap: wrap; justify-content: center; }
-    .snapshot { margin: 10px; border: 3px solid #ccc; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
-    .snapshot.outlier { border-color: #e74c3c; }
-    .snapshot img { display: block; max-width: 200px; }
-    .snapshot p { margin: 5px; font-size: 0.9em; text-align: center; }
+    :root {
+      --honey-gold: #FFB347;
+      --hive-brown: #6B4423;
+      --comb-yellow: #F4D03F;
+      --healthy-green: #82C341;
+      --alert-red: #E74C3C;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto Condensed', sans-serif;
+      background: linear-gradient(45deg, #fff5e6, #fff);
+    }
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 20px;
+    }
+    .header {
+      background: var(--hive-brown);
+      padding: 1rem 2rem;
+      color: var(--comb-yellow);
+      text-align: center;
+      font-family: 'Honeybee', cursive;
+      font-size: 2.5em;
+      margin-bottom: 20px;
+      border-radius: 5px;
+    }
+    .day-container {
+      background: #fff;
+      margin-bottom: 30px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-radius: 10px;
+    }
+    .stats {
+      margin-bottom: 10px;
+      text-align: center;
+      font-size: 1.2em;
+    }
+    .snapshots {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .snapshot {
+      margin: 10px;
+      border: 3px solid #ccc;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-radius: 5px;
+    }
+    .snapshot.outlier {
+      border-color: var(--alert-red);
+    }
+    .snapshot img {
+      display: block;
+      max-width: 200px;
+      border-radius: 5px;
+    }
+    .snapshot p {
+      margin: 5px;
+      font-size: 0.9em;
+      text-align: center;
+    }
     /* Modal styles */
-    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); }
-    .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 90%; max-height: 90%; }
-    .modal-close { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.9);
+    }
+    .modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 10px;
+    }
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 35px;
+      color: #f1f1f1;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h1>Daily Snapshots</h1>
-  <div id="days-container">
+  <div class="container">
+    <div class="header">Daily Snapshots</div>
 """
+            # Loop over day folders
             for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
                 day_folder = os.path.join(SNAPSHOT_ROOT, day)
                 if not os.path.isdir(day_folder):
@@ -498,6 +543,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     records = []
                 if not records:
                     continue
+                try:
+                    human_date = datetime.strptime(day, "%Y%m%d").strftime("%d %B, %Y")
+                except Exception:
+                    human_date = day
                 temps = [r["temperature"] for r in records]
                 hums = [r["humidity"] for r in records]
                 reds = [r["red_count"] for r in records]
@@ -508,11 +557,12 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums))
                 std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds))
                 html_content += f"""<div class="day-container">
-  <h2 style="text-align:center;">{day}</h2>
-  <div class="stats">
-    <strong>Averages:</strong> Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
-  </div>
-  <div class="snapshots">"""
+      <div class="stats">
+        <strong>{human_date}</strong><br>
+        Averages: Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
+      </div>
+      <div class="snapshots">
+      """
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
                     outlier = (
                         rec["temperature"] > avg_temp + 2*std_temp or
@@ -521,10 +571,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     )
                     image_url = f"/snapshot/{day}/{rec['filename']}"
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
-  <img src="{image_url}">
-  <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-     Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
-</div>"""
+        <img src="{image_url}">
+        <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
+           Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+      </div>"""
                 html_content += "</div></div>"
             html_content += """
   </div>
