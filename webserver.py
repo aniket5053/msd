@@ -500,7 +500,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 html_content += f"""<div class="day-container">
   <h2>{day}</h2>
   <div class="stats">
-    <strong>Averages:</strong> Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
+    <strong>Averages:</strong> Temp: {avg_temp:.1f} F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
   </div>
   <div class="snapshots">"""
                 # List snapshots for this day
