@@ -25,7 +25,7 @@ os.makedirs(SNAPSHOT_ROOT, exist_ok=True)
 # Initialize sensor
 sht = adafruit_sht4x.SHT4x(board.I2C())
 
-# Initialize LEDs (4 LEDs) and LED flag
+# Initialize LEDs (4 LEDs)
 dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
 LED_enable = False
 
@@ -448,7 +448,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Build a page that lists each day's folder with averages and highlights outliers.
+            # Build a page that lists each day's folder with averages and a modal for full screen images.
             html_content = """<html>
 <head>
   <title>Daily Snapshots</title>
@@ -457,21 +457,26 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     h1 { text-align: center; }
     .day-container { background: #fff; margin-bottom: 30px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .stats { margin-bottom: 10px; }
-    .snapshot { display: inline-block; margin: 10px; border: 3px solid #ccc; }
+    .snapshots { display: flex; flex-wrap: wrap; }
+    .snapshot { margin: 10px; border: 3px solid #ccc; cursor: pointer; }
     .snapshot.outlier { border-color: #e74c3c; }
     .snapshot img { display: block; max-width: 200px; }
-    .snapshot p { margin: 5px; font-size: 0.9em; }
+    .snapshot p { margin: 5px; font-size: 0.9em; text-align: center; }
+    /* Modal styles */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); }
+    .modal-content { margin: auto; display: block; max-width: 90%; max-height: 90%; }
+    .modal-close { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; }
   </style>
 </head>
 <body>
   <h1>Daily Snapshots</h1>
+  <div id="days-container">
 """
             # List daily folders
             for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
                 day_folder = os.path.join(SNAPSHOT_ROOT, day)
                 if not os.path.isdir(day_folder):
                     continue
-                # Read metadata file (if exists)
                 metadata_file = os.path.join(day_folder, "data.json")
                 if not os.path.exists(metadata_file):
                     continue
@@ -498,22 +503,41 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     <strong>Averages:</strong> Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
   </div>
   <div class="snapshots">"""
-                # List snapshots in this day folder using metadata order (sorted by timestamp)
+                # List snapshots for this day
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
-                    # Determine if any metric is an outlier (more than avg + 2*std)
                     outlier = (
                         rec["temperature"] > avg_temp + 2*std_temp or
                         rec["humidity"] > avg_hum + 2*std_hum or
                         rec["red_count"] > avg_red + 2*std_red
                     )
                     image_url = f"/snapshot/{day}/{rec['filename']}"
-                    html_content += f"""<div class="snapshot{' outlier' if outlier else ''}">
+                    html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
   <img src="{image_url}">
   <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-     Temp: {rec['temperature']:.1f} F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+     Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
 </div>"""
                 html_content += "</div></div>"
-            html_content += "</body></html>"
+            html_content += """
+  </div>
+  <!-- Modal for full screen image -->
+  <div id="myModal" class="modal" onclick="closeModal()">
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+    <img class="modal-content" id="modalImage">
+  </div>
+  <script>
+    function openModal(src) {
+      var modal = document.getElementById("myModal");
+      var modalImg = document.getElementById("modalImage");
+      modal.style.display = "block";
+      modalImg.src = src;
+    }
+    function closeModal() {
+      document.getElementById("myModal").style.display = "none";
+    }
+  </script>
+</body>
+</html>
+"""
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
             self.end_headers()
@@ -581,24 +605,22 @@ def snapshot_loop():
     Every 60 seconds, capture a snapshot from the camera stream,
     overlay sensor readings and red dot count, and save the image.
     The LED is used as a flash during the capture.
-    Also, append the sensor metadata for this snapshot into a daily JSON log.
+    Also, append metadata for this snapshot into a daily JSON log.
     """
     global output
     while True:
         time.sleep(60)  # Wait one minute
-        # Use LED as flash
+        # Flash LED
         dots.fill((255, 255, 255))
-        time.sleep(0.1)  # Flash duration
+        time.sleep(0.1)
         with output.condition:
             frame_data = output.frame
         dots.fill((0, 0, 0))
         if frame_data is None:
             continue
-        # Decode the JPEG image to a numpy array
         img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             continue
-        # Get the latest sensor reading
         with data_lock:
             if sensor_data:
                 latest_sensor = sensor_data[-1]
@@ -607,18 +629,14 @@ def snapshot_loop():
         red_count = output.get_red_count()
         overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        # Overlay sensor data and timestamp onto the image
         cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
         cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        # Determine the daily folder based on current date (YYYYMMDD)
         day_folder_name = time.strftime("%Y%m%d")
         day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
         os.makedirs(day_folder, exist_ok=True)
-        # Save the snapshot image
         filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
         file_path = os.path.join(day_folder, filename)
         cv2.imwrite(file_path, img)
-        # Append metadata for this snapshot into a daily JSON file
         metadata_file = os.path.join(day_folder, "data.json")
         record = {
             "timestamp": time.time(),
