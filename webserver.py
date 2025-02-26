@@ -4,6 +4,7 @@ import socketserver
 import json
 import time
 import threading
+import os
 from collections import deque
 from http import server
 from threading import Condition, Lock
@@ -16,16 +17,18 @@ from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
+# Create snapshots directory if it doesn't exist
+os.makedirs("snapshots", exist_ok=True)
+
 # Initialize sensor
 sht = adafruit_sht4x.SHT4x(board.I2C())
 
-# Initialize LEDs and LED flag
+# Initialize LEDs (4 LEDs) and LED flag
 dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
 LED_enable = False
 
-# Global flag to control streaming
+# Global flag to control streaming and a timestamp for tracking its duration
 streaming_enabled = True
-# Global timestamp to track when streaming was enabled
 streaming_start_time = time.time()  # streaming starts enabled
 
 # Store sensor readings with thread safety
@@ -273,7 +276,7 @@ PAGE = """\
         });
     }
 
-    // Function to toggle the stream on/off
+    // Toggle the stream on/off
     function toggleStream() {
         fetch('/toggle')
         .then(response => response.json())
@@ -305,7 +308,7 @@ PAGE = """\
             <div class="status-bar">
                 <div class="metric green">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10M15.5,10A2.5,2.5 0 0,1 18,12.5A2.5,2.5 0 0,1 15.5,15A2.5,2.5 0 0,1 13,12.5A2.5,2.5 0 0,1 15.5,10M8.5,5A2.5,2.5 0 0,1 11,7.5A2.5,2.5 0 0,1 8.5,10A2.5,2.5 0 0,1 6,7.5A2.5,2.5 0 0,1 8.5,5M15.5,5A2.5,2.5 0 0,1 18,7.5A2.5,2.5 0 0,1 15.5,10A2.5,2.5 0 0,1 13,7.5A2.5,2.5 0 0,1 15.5,5M12,2C14.5,2 16.75,2.89 18.5,4.38C17.12,5.14 16,6.05 15,7L12,4L9,7C8,6.05 6.88,5.14 5.5,4.38C7.25,2.89 9.5,2 12,2M12,22C9.5,22 7.25,21.11 5.5,19.62C6.88,18.86 8,17.95 9,17L12,20L15,17C16,17.95 17.12,18.86 18.5,19.62C16.75,21.11 14.5,22 12,22Z"/>
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10M15.5,10A2.5,2.5 0 0,1 18,12.5A2.5,2.5 0 0,1 15.5,15A2.5,2.5 0 0,1 13,12.5A2.5,2.5 0 0,1 15.5,10"/>
                     </svg>
                     <span id="temp">-</span>F
                 </div>
@@ -321,7 +324,7 @@ PAGE = """\
                     </svg>
                     <span id="red-count">0</span>
                 </div>
-                <!-- Toggle button for stream control -->
+                <!-- Button to toggle streaming -->
                 <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
             <img class="video-feed" src="stream.mjpg" />
@@ -331,6 +334,10 @@ PAGE = """\
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
+        </div>
+        <!-- Link to view snapshots in a new tab -->
+        <div style="text-align:center; margin: 1rem;">
+            <a href="/snapshots" target="_blank">View Snapshots</a>
         </div>
     </div>
 </body>
@@ -438,6 +445,33 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
+        elif self.path == '/snapshots':
+            # Generate an HTML page that lists all snapshots
+            try:
+                files = sorted(os.listdir("snapshots"), reverse=True)
+            except Exception as e:
+                files = []
+            html_content = "<html><head><title>Snapshots</title></head><body>"
+            html_content += "<h1>Snapshots</h1>"
+            for file in files:
+                html_content += f'<div style="margin-bottom:20px;"><img src="/snapshot/{file}" style="max-width:100%;height:auto;"><p>{file}</p></div>'
+            html_content += "</body></html>"
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(html_content.encode('utf-8'))
+        elif self.path.startswith('/snapshot/'):
+            filename = self.path[len('/snapshot/'):]
+            file_path = os.path.join("snapshots", filename)
+            if os.path.exists(file_path):
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/jpeg')
+                self.end_headers()
+                with open(file_path, 'rb') as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_error(404)
+                self.end_headers()
         else:
             self.send_error(404)
             self.end_headers()
@@ -480,7 +514,45 @@ def streaming_timeout_monitor():
                 streaming_start_time = None
         time.sleep(1)
 
-# Initialize camera with square aspect ratio
+def snapshot_loop():
+    """
+    Every 60 seconds, capture a snapshot from the camera stream,
+    overlay sensor readings and red dot count, and save the image.
+    The LED is used as a flash during the capture.
+    """
+    global output
+    while True:
+        time.sleep(60)  # Wait one minute
+        # Turn on LED as flash
+        dots.fill((255, 255, 255))
+        time.sleep(0.1)  # Short flash duration
+        with output.condition:
+            frame_data = output.frame
+        # Turn off the flash
+        dots.fill((0, 0, 0))
+        if frame_data is None:
+            continue
+        # Decode the JPEG image to a numpy array
+        img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            continue
+        # Get the latest sensor reading
+        with data_lock:
+            if sensor_data:
+                latest_sensor = sensor_data[-1]
+            else:
+                latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
+        red_count = output.get_red_count()
+        overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        # Overlay the sensor data and timestamp onto the image
+        cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+        cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+        # Save the snapshot with a timestamp in the filename
+        filename = f"snapshots/snapshot_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
+        cv2.imwrite(filename, img)
+
+# Initialize camera with a square aspect ratio
 picam2 = Picamera2()
 config = picam2.create_video_configuration({
     'size': (640, 640),  # Square resolution
@@ -490,13 +562,17 @@ picam2.configure(config)
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
-# Start sensor thread
+# Start sensor reading thread
 sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
 sensor_thread.start()
 
-# Start the streaming timeout monitor thread
+# Start streaming timeout monitor thread
 timeout_thread = threading.Thread(target=streaming_timeout_monitor, daemon=True)
 timeout_thread.start()
+
+# Start snapshot capture thread
+snapshot_thread = threading.Thread(target=snapshot_loop, daemon=True)
+snapshot_thread.start()
 
 try:
     address = ('', 7123)
