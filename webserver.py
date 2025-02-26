@@ -23,15 +23,16 @@ sht = adafruit_sht4x.SHT4x(board.I2C())
 dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
 LED_enable = False
 LED_enable_time = 0
+# Enable LEDs dots[0 - 3] = (255, 255, 255) white light
+# Disable LEDs dots[0 - 3] = (0, 0, 0) no light
 
-# Global flag for streaming state; start with streaming off
-streaming = False
+# Global flag to control the streaming (added)
+streaming_enabled = True
 
 # Store sensor readings with thread safety
 sensor_data = deque(maxlen=100)
 data_lock = Lock()
 
-# Updated HTML page with toggle button and minor CSS fixes for logos
 PAGE = """\
 <html>
 <head>
@@ -76,34 +77,19 @@ PAGE = """\
         color: var(--comb-yellow);
         display: flex;
         align-items: center;
-    }
-    
-    .logo svg {
-        vertical-align: middle;
-        margin-right: 0.5rem;
+        gap: 0.5rem;
     }
     
     .video-section {
-        width: 90%;
+        width: 100%;
         aspect-ratio: 1 / 1;
         background: var(--hive-brown);
         position: relative;
         overflow: hidden;
         border-radius: 16px;
         margin: 1rem auto;
+        width: 90%;
         box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-    }
-    
-    .toggle-button-container {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        z-index: 2;
-    }
-    
-    .toggle-button-container button {
-        padding: 0.5rem 1rem;
-        font-size: 1rem;
     }
     
     .status-bar {
@@ -288,22 +274,20 @@ PAGE = """\
         });
     }
 
-    // Toggle streaming button handler
+    // New function to toggle the stream on/off
+    function toggleStream() {
+        fetch('/toggle')
+        .then(response => response.json())
+        .then(data => {
+            const btn = document.getElementById('toggleStreamBtn');
+            btn.textContent = data.streaming ? "Disable Stream" : "Enable Stream";
+        });
+    }
+
     window.addEventListener('load', () => {
         initChart();
         setInterval(updateMetrics, 1000);
         setInterval(updateChart, 10000);
-        document.getElementById('toggleStreaming').addEventListener('click', function() {
-            fetch('/toggle_stream')
-              .then(response => response.json())
-              .then(data => {
-                 if (data.streaming) {
-                      document.getElementById('toggleStreaming').textContent = 'Stop Streaming';
-                 } else {
-                      document.getElementById('toggleStreaming').textContent = 'Start Streaming';
-                 }
-              });
-        });
     });
 </script>
 </head>
@@ -312,27 +296,23 @@ PAGE = """\
         <div class="header">
             <div class="logo">
                 <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C14.65 2 17.2 3.05 19.07 4.93C20.95 6.8 22 9.35 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2M12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12C20 7.58 16.42 4 12 4M12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5M12 7.5C11.17 7.5 10.5 8.17 10.5 9C10.5 9.83 11.17 10.5 12 10.5C12.83 10.5 13.5 9.83 13.5 9C13.5 8.17 12.83 7.5 12 7.5M8.5 10C7.67 10 7 10.67 7 11.5C7 12.33 7.67 13 8.5 13C9.33 13 10 12.33 10 11.5C10 10.67 9.33 10 8.5 10M15.5 10C14.67 10 14 10.67 14 11.5C14 12.33 14.67 13 15.5 13C16.33 13 17 12.33 17 11.5C17 10.67 16.33 10 15.5 10M8.5 5A2.5 2.5 0 0,1 11 7.5A2.5 2.5 0 0,1 8.5 10A2.5 2.5 0 0,1 6 7.5A2.5 2.5 0 0,1 8.5 5M15.5 5A2.5 2.5 0 0,1 18 7.5A2.5 2.5 0 0,1 15.5 10A2.5 2.5 0 0,1 13 7.5A2.5 2.5 0 0,1 15.5 5M12 2C14.5 2 16.75 2.89 18.5 4.38C17.12 5.14 16 6.05 15 7L12 4L9 7C8 6.05 6.88 5.14 5.5 4.38C7.25 2.89 9.5 2 12 2M12 22C9.5 22 7.25 21.11 5.5 19.62C6.88 18.86 8 17.95 9 17L12 20L15 17C16 17.95 17.12 18.86 18.5 19.62C16.75 21.11 14.5 22 12 22Z"/>
+                    <path d="M12 2C14.65 2 17.2 3.05 19.07 4.93C20.95 6.8 22 9.35 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2M12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12C20 7.58 16.42 4 12 4M12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5M12 7.5C11.17 7.5 10.5 8.17 10.5 9C10.5 9.83 11.17 10.5 12 10.5C12.83 10.5 13.5 9.83 13.5 9C13.5 8.17 12.83 7.5 12 7.5M8.5 10C7.67 10 7 10.67 7 11.5C7 12.33 7.67 13 8.5 13C9.33 13 10 12.33 10 11.5C10 10.67 9.33 10 8.5 10M15.5 10C14.67 10 14 10.67 14 11.5C14 12.33 14.67 13 15.5 13C16.33 13 17 12.33 17 11.5C17 10.67 16.33 10 15.5 10M12 15C13.66 15 15 13.66 15 12H9C9 13.66 10.34 15 12 15Z"/>
                 </svg>
                 HiveHealth
             </div>
         </div>
         
         <div class="video-section">
-            <!-- Toggle button overlay -->
-            <div class="toggle-button-container">
-                <button id="toggleStreaming">Start Streaming</button>
-            </div>
             <div class="status-bar">
                 <div class="metric green">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5"/>
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10M15.5,10A2.5,2.5 0 0,1 18,12.5A2.5,2.5 0 0,1 15.5,15A2.5,2.5 0 0,1 13,12.5A2.5,2.5 0 0,1 15.5,10M8.5,5A2.5,2.5 0 0,1 11,7.5A2.5,2.5 0 0,1 8.5,10A2.5,2.5 0 0,1 6,7.5A2.5,2.5 0 0,1 8.5,5M15.5,5A2.5,2.5 0 0,1 18,7.5A2.5,2.5 0 0,1 15.5,10A2.5,2.5 0 0,1 13,7.5A2.5,2.5 0 0,1 15.5,5M12,2C14.5,2 16.75,2.89 18.5,4.38C17.12,5.14 16,6.05 15,7L12,4L9,7C8,6.05 6.88,5.14 5.5,4.38C7.25,2.89 9.5,2 12,2M12,22C9.5,22 7.25,21.11 5.5,19.62C6.88,18.86 8,17.95 9,17L12,20L15,17C16,17.95 17.12,18.86 18.5,19.62C16.75,21.11 14.5,22 12,22Z"/>
                     </svg>
                     <span id="temp">-</span>F
                 </div>
                 <div class="metric blue">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97"/>
+                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97M9.75,10A1.25,1.25 0 0,1 11,11.25A1.25,1.25 0 0,1 9.75,12.5A1.25,1.25 0 0,1 8.5,11.25A1.25,1.25 0 0,1 9.75,10M14.25,14.5A1.25,1.25 0 0,1 15.5,15.75A1.25,1.25 0 0,1 14.25,17A1.25,1.25 0 0,1 13,15.75A1.25,1.25 0 0,1 14.25,14.5Z"/>
                     </svg>
                     <span id="hum">-</span>%
                 </div>
@@ -342,6 +322,8 @@ PAGE = """\
                     </svg>
                     <span id="red-count">0</span>
                 </div>
+                <!-- New toggle button for stream control -->
+                <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
             <img class="video-feed" src="stream.mjpg" />
         </div>
@@ -367,25 +349,31 @@ class StreamingOutput(io.BufferedIOBase):
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            
             # Red color ranges
             lower_red1 = np.array([0, 120, 70])
             upper_red1 = np.array([10, 255, 255])
             lower_red2 = np.array([170, 120, 70])
             upper_red2 = np.array([180, 255, 255])
+            
             mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
             mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
             full_mask = cv2.bitwise_or(mask1, mask2)
+            
             # Find and draw contours
             contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             self.red_count = 0
+            
             for contour in contours:
                 if cv2.contourArea(contour) > 500:
                     self.red_count += 1
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+            
             # Encode modified image
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
+
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
@@ -395,7 +383,6 @@ class StreamingOutput(io.BufferedIOBase):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
-        global streaming, LED_enable, LED_enable_time, picam2
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/index.html')
@@ -414,27 +401,22 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Pragma', 'no-cache')
             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
             self.end_headers()
-            while True:
-                if streaming:
+            try:
+                while True:
+                    if not streaming_enabled:
+                        time.sleep(0.1)
+                        continue
                     with output.condition:
-                        output.condition.wait(timeout=1)
+                        output.condition.wait()
                         frame = output.frame
-                else:
-                    # Generate a blank image placeholder
-                    blank_img = np.zeros((640, 640, 3), dtype=np.uint8)
-                    ret, jpeg = cv2.imencode('.jpg', blank_img)
-                    frame = jpeg.tobytes()
-                    time.sleep(1)
-                try:
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
                     self.send_header('Content-Length', len(frame))
                     self.end_headers()
                     self.wfile.write(frame)
                     self.wfile.write(b'\r\n')
-                except Exception as e:
-                    logging.warning('Streaming stopped: %s', str(e))
-                    break
+            except Exception as e:
+                logging.warning('Streaming stopped: %s', str(e))
         elif self.path == '/sensors':
             with data_lock:
                 data_copy = list(sensor_data)
@@ -447,25 +429,14 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'count': output.get_red_count()}).encode('utf-8'))
-        elif self.path == '/toggle_stream':
-            global streaming, LED_enable, LED_enable_time, picam2
-            if streaming:
-                picam2.stop_recording()
-                streaming_state = False
-                # Turn off LED immediately when streaming stops
-                LED_enable = False
-                for i in range(4):
-                    dots[i] = (0, 0, 0)
-            else:
-                picam2.start_recording(JpegEncoder(), FileOutput(output))
-                streaming_state = True
-                LED_enable = True
-                LED_enable_time = time.time()
-            streaming = streaming_state
+        # New endpoint to toggle streaming on/off
+        elif self.path == '/toggle':
+            global streaming_enabled
+            streaming_enabled = not streaming_enabled
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'streaming': streaming}).encode('utf-8'))
+            self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         else:
             self.send_error(404)
             self.end_headers()
@@ -478,13 +449,14 @@ def sensor_loop():
     while True:
         try:
             temp = round(sht.temperature, 3)
-            temp = temp * 9/5 + 32  # Fahrenheit conversion
+            temp = temp * 9/5 + 32  # Convert to Fahrenheit
             hum = round(sht.relative_humidity, 3)
             with data_lock:
                 if (not sensor_data or 
                     time.time() - sensor_data[-1]['time'] >= 10 or
                     abs(temp - sensor_data[-1]['temperature']) > 0.1 or
                     abs(hum - sensor_data[-1]['humidity']) > 0.5):
+                    
                     sensor_data.append({
                         "time": time.time(),
                         "temperature": temp,
@@ -492,15 +464,6 @@ def sensor_loop():
                     })
         except Exception as e:
             logging.error("Sensor error: %s", e)
-        time.sleep(1)
-
-def led_monitor_loop():
-    global LED_enable, LED_enable_time, streaming
-    while True:
-        if streaming and LED_enable and (time.time() - LED_enable_time > 60):
-            LED_enable = False
-            for i in range(4):
-                dots[i] = (0, 0, 0)
         time.sleep(1)
 
 # Initialize camera with square aspect ratio
@@ -511,20 +474,15 @@ config = picam2.create_video_configuration({
 })
 picam2.configure(config)
 output = StreamingOutput()
-# Note: streaming is off by default so we do not start recording here
+picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 # Start sensor thread
 sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
 sensor_thread.start()
-
-# Start LED monitor thread
-led_thread = threading.Thread(target=led_monitor_loop, daemon=True)
-led_thread.start()
 
 try:
     address = ('', 7123)
     server = StreamingServer(address, StreamingHandler)
     server.serve_forever()
 finally:
-    if streaming:
-        picam2.stop_recording()
+    picam2.stop_recording()
