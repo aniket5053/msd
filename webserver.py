@@ -383,6 +383,7 @@ class StreamingOutput(io.BufferedIOBase):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
+        global streaming_enabled
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/index.html')
@@ -403,6 +404,11 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             try:
                 while True:
+                    LED_enable = streaming_enabled
+                    if LED_enable:
+                        dots.fill((255,255,255))
+                    else:
+                        dots.fill((0,0,0))
                     if not streaming_enabled:
                         time.sleep(0.1)
                         continue
@@ -429,18 +435,9 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'count': output.get_red_count()}).encode('utf-8'))
-        # New endpoint to toggle streaming on/off and update LED state accordingly
+        # New endpoint to toggle streaming on/off
         elif self.path == '/toggle':
-            global streaming_enabled
             streaming_enabled = not streaming_enabled
-            if streaming_enabled:
-                # Turn on LEDs: set to white light
-                for i in range(4):
-                    dots[i] = (255, 255, 255)
-            else:
-                # Turn off LEDs
-                for i in range(4):
-                    dots[i] = (0, 0, 0)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
