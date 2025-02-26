@@ -559,7 +559,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 html_content += f"""<div class="day-container">
       <div class="stats">
         <strong>{human_date}</strong><br>
-        Averages: Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
+        Averages: Temp: {avg_temp:.1f}F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
       </div>
       <div class="snapshots">
       """
@@ -573,7 +573,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
         <img src="{image_url}">
         <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-           Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+           Temp: {rec['temperature']:.1f}F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
       </div>"""
                 html_content += "</div></div>"
             html_content += """
