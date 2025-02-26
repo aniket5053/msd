@@ -22,12 +22,11 @@ sht = adafruit_sht4x.SHT4x(board.I2C())
 # Initialize LEDs and LED flag
 dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
 LED_enable = False
-LED_enable_time = 0
-# Enable LEDs dots[0 - 3] = (255, 255, 255) white light
-# Disable LEDs dots[0 - 3] = (0, 0, 0) no light
 
-# Global flag to control the streaming (added)
+# Global flag to control streaming
 streaming_enabled = True
+# Global timestamp to track when streaming was enabled
+streaming_start_time = time.time()  # streaming starts enabled
 
 # Store sensor readings with thread safety
 sensor_data = deque(maxlen=100)
@@ -274,7 +273,7 @@ PAGE = """\
         });
     }
 
-    // New function to toggle the stream on/off
+    // Function to toggle the stream on/off
     function toggleStream() {
         fetch('/toggle')
         .then(response => response.json())
@@ -322,7 +321,7 @@ PAGE = """\
                     </svg>
                     <span id="red-count">0</span>
                 </div>
-                <!-- New toggle button for stream control -->
+                <!-- Toggle button for stream control -->
                 <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
             <img class="video-feed" src="stream.mjpg" />
@@ -349,31 +348,25 @@ class StreamingOutput(io.BufferedIOBase):
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-            
             # Red color ranges
             lower_red1 = np.array([0, 120, 70])
             upper_red1 = np.array([10, 255, 255])
             lower_red2 = np.array([170, 120, 70])
             upper_red2 = np.array([180, 255, 255])
-            
             mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
             mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
             full_mask = cv2.bitwise_or(mask1, mask2)
-            
             # Find and draw contours
             contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             self.red_count = 0
-            
             for contour in contours:
                 if cv2.contourArea(contour) > 500:
                     self.red_count += 1
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
-            
             # Encode modified image
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
-
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
@@ -383,7 +376,7 @@ class StreamingOutput(io.BufferedIOBase):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
-        global streaming_enabled
+        global streaming_enabled, streaming_start_time
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/index.html')
@@ -404,8 +397,8 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             try:
                 while True:
-                    LED_enable = streaming_enabled
-                    if LED_enable:
+                    # Update LED based on streaming_enabled flag
+                    if streaming_enabled:
                         dots.fill((255,255,255))
                     else:
                         dots.fill((0,0,0))
@@ -435,9 +428,12 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'count': output.get_red_count()}).encode('utf-8'))
-        # New endpoint to toggle streaming on/off
         elif self.path == '/toggle':
             streaming_enabled = not streaming_enabled
+            if streaming_enabled:
+                streaming_start_time = time.time()  # Record when streaming was enabled
+            else:
+                streaming_start_time = None  # Reset if streaming is disabled
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -461,7 +457,6 @@ def sensor_loop():
                     time.time() - sensor_data[-1]['time'] >= 10 or
                     abs(temp - sensor_data[-1]['temperature']) > 0.1 or
                     abs(hum - sensor_data[-1]['humidity']) > 0.5):
-                    
                     sensor_data.append({
                         "time": time.time(),
                         "temperature": temp,
@@ -469,6 +464,20 @@ def sensor_loop():
                     })
         except Exception as e:
             logging.error("Sensor error: %s", e)
+        time.sleep(1)
+
+def streaming_timeout_monitor():
+    """
+    Monitor streaming_enabled. If streaming remains True for more than 60 seconds,
+    disable it automatically.
+    """
+    global streaming_enabled, streaming_start_time
+    while True:
+        if streaming_enabled and streaming_start_time is not None:
+            if time.time() - streaming_start_time > 60:
+                logging.info("Streaming has been enabled for over 60 seconds. Disabling streaming.")
+                streaming_enabled = False
+                streaming_start_time = None
         time.sleep(1)
 
 # Initialize camera with square aspect ratio
@@ -484,6 +493,10 @@ picam2.start_recording(JpegEncoder(), FileOutput(output))
 # Start sensor thread
 sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
 sensor_thread.start()
+
+# Start the streaming timeout monitor thread
+timeout_thread = threading.Thread(target=streaming_timeout_monitor, daemon=True)
+timeout_thread.start()
 
 try:
     address = ('', 7123)
