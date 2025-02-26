@@ -125,7 +125,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         """Handle GET requests"""
         if self.path == '/':
             self.redirect('/index.html')
-        elif self.path == '/index.html':
+        elif self.path in ['/index.html', '/index']:
             self.serve_page()
         elif self.path == '/stream.mjpg':
             self.handle_stream()
