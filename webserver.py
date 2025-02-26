@@ -37,6 +37,7 @@ streaming_start_time = time.time()  # streaming starts enabled
 sensor_data = deque(maxlen=100)
 data_lock = Lock()
 
+# Main page HTML with added style for the snapshots link
 PAGE = """\
 <html>
 <head>
@@ -152,6 +153,21 @@ PAGE = """\
     #sensorChart {
         width: 100% !important;
         height: 100% !important;
+    }
+    /* New style for the snapshots link on the main page */
+    .snapshot-link {
+         display: inline-block;
+         padding: 10px 20px;
+         background: var(--comb-yellow);
+         color: #fff;
+         text-decoration: none;
+         border-radius: 5px;
+         font-size: 1.2em;
+         transition: background 0.3s ease;
+         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .snapshot-link:hover {
+         background: #f39c12;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -310,23 +326,23 @@ PAGE = """\
             <div class="status-bar">
                 <div class="metric green">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5M8.5,10A2.5,2.5 0 0,1 11,12.5A2.5,2.5 0 0,1 8.5,15A2.5,2.5 0 0,1 6,12.5A2.5,2.5 0 0,1 8.5,10"/>
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17A2,2 0 0,1 12,15M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,5A2,2 0 0,1 14,7A2,2 0 0,1 12,9A2,2 0 0,1 10,7A2,2 0 0,1 12,5"/>
                     </svg>
                     <span id="temp">-</span>F
                 </div>
                 <div class="metric blue">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97M9.75,10A1.25,1.25 0 0,1 11,11.25A1.25,1.25 0 0,1 9.75,12.5A1.25,1.25 0 0,1 8.5,11.25A1.25,1.25 0 0,1 9.75,10"/>
+                        <path d="M12,3.25C12,3.25 6,10 6,14C6,17.32 8.69,20 12,20A6,6 0 0,0 18,14C18,10 12,3.25 12,3.25M14.47,9.97L15.53,11.03L9.53,17.03L8.47,15.97"/>
                     </svg>
                     <span id="hum">-</span>%
                 </div>
                 <div class="metric red">
                     <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M17,15V13H7V15L12,20L17,15M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M10,7H14V9H10V7M10,11H14V13H10V11Z"/>
+                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M17,15V13H7V15L12,20L17,15M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4"/>
                     </svg>
                     <span id="red-count">0</span>
                 </div>
-                <!-- Button to toggle streaming -->
+                <!-- Toggle streaming button -->
                 <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
             <img class="video-feed" src="stream.mjpg" />
@@ -337,9 +353,9 @@ PAGE = """\
                 <canvas id="sensorChart"></canvas>
             </div>
         </div>
-        <!-- Link to view snapshots in a new tab -->
+        <!-- Styled link to view snapshots -->
         <div style="text-align:center; margin: 1rem;">
-            <a href="/snapshots" target="_blank">View Snapshots</a>
+            <a href="/snapshots" target="_blank" class="snapshot-link">View Snapshots</a>
         </div>
     </div>
 </body>
@@ -406,7 +422,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             try:
                 while True:
-                    # Update LED based on streaming_enabled flag
                     if streaming_enabled:
                         dots.fill((255,255,255))
                     else:
@@ -440,15 +455,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         elif self.path == '/toggle':
             streaming_enabled = not streaming_enabled
             if streaming_enabled:
-                streaming_start_time = time.time()  # Record when streaming was enabled
+                streaming_start_time = time.time()
             else:
-                streaming_start_time = None  # Reset if streaming is disabled
+                streaming_start_time = None
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Build a page that lists each day's folder with averages and a modal for full screen images.
+            # Build a page listing each day's folder with averages and a centered layout.
             html_content = """<html>
 <head>
   <title>Daily Snapshots</title>
@@ -457,7 +472,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     h1 { text-align: center; }
     .day-container { background: #fff; margin-bottom: 30px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .stats { margin-bottom: 10px; }
-    .snapshots { display: flex; flex-wrap: wrap; }
+    .snapshots { display: flex; flex-wrap: wrap; justify-content: center; }
     .snapshot { margin: 10px; border: 3px solid #ccc; cursor: pointer; }
     .snapshot.outlier { border-color: #e74c3c; }
     .snapshot img { display: block; max-width: 200px; }
@@ -472,7 +487,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
   <h1>Daily Snapshots</h1>
   <div id="days-container">
 """
-            # List daily folders
             for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
                 day_folder = os.path.join(SNAPSHOT_ROOT, day)
                 if not os.path.isdir(day_folder):
@@ -483,11 +497,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 try:
                     with open(metadata_file, "r") as f:
                         records = json.load(f)
-                except Exception as ex:
+                except Exception:
                     records = []
                 if not records:
                     continue
-                # Calculate averages and standard deviations
                 temps = [r["temperature"] for r in records]
                 hums = [r["humidity"] for r in records]
                 reds = [r["red_count"] for r in records]
@@ -503,7 +516,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     <strong>Averages:</strong> Temp: {avg_temp:.1f} F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
   </div>
   <div class="snapshots">"""
-                # List snapshots for this day
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
                     outlier = (
                         rec["temperature"] > avg_temp + 2*std_temp or
@@ -543,7 +555,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html_content.encode('utf-8'))
         elif self.path.startswith('/snapshot/'):
-            # Serve snapshots. Expecting URL of the form /snapshot/<day>/<filename>
             parts = self.path.split('/')
             if len(parts) >= 4:
                 day = parts[2]
@@ -570,7 +581,7 @@ def sensor_loop():
     while True:
         try:
             temp = round(sht.temperature, 3)
-            temp = temp * 9/5 + 32  # Convert to Fahrenheit
+            temp = temp * 9/5 + 32  # Fahrenheit conversion
             hum = round(sht.relative_humidity, 3)
             with data_lock:
                 if (not sensor_data or 
@@ -587,10 +598,6 @@ def sensor_loop():
         time.sleep(1)
 
 def streaming_timeout_monitor():
-    """
-    Monitor streaming_enabled. If streaming remains True for more than 60 seconds,
-    disable it automatically.
-    """
     global streaming_enabled, streaming_start_time
     while True:
         if streaming_enabled and streaming_start_time is not None:
@@ -601,16 +608,9 @@ def streaming_timeout_monitor():
         time.sleep(1)
 
 def snapshot_loop():
-    """
-    Every 60 seconds, capture a snapshot from the camera stream,
-    overlay sensor readings and red dot count, and save the image.
-    The LED is used as a flash during the capture.
-    Also, append metadata for this snapshot into a daily JSON log.
-    """
     global output
     while True:
         time.sleep(60)  # Wait one minute
-        # Flash LED
         dots.fill((255, 255, 255))
         time.sleep(0.1)
         with output.condition:
@@ -657,25 +657,22 @@ def snapshot_loop():
         with open(metadata_file, "w") as f:
             json.dump(records, f)
 
-# Initialize camera with a square aspect ratio
+# Initialize camera with square aspect ratio
 picam2 = Picamera2()
 config = picam2.create_video_configuration({
-    'size': (640, 640),  # Square resolution
+    'size': (640, 640),
     'format': 'XRGB8888'
 })
 picam2.configure(config)
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
-# Start sensor reading thread
 sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
 sensor_thread.start()
 
-# Start streaming timeout monitor thread
 timeout_thread = threading.Thread(target=streaming_timeout_monitor, daemon=True)
 timeout_thread.start()
 
-# Start snapshot capture thread
 snapshot_thread = threading.Thread(target=snapshot_loop, daemon=True)
 snapshot_thread.start()
 
