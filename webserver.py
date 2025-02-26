@@ -514,7 +514,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
   <img src="{image_url}">
   <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-     Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+     Temp: {rec['temperature']:.1f} F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
 </div>"""
                 html_content += "</div></div>"
             html_content += """
