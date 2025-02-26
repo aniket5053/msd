@@ -429,10 +429,18 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'count': output.get_red_count()}).encode('utf-8'))
-        # New endpoint to toggle streaming on/off
+        # New endpoint to toggle streaming on/off and update LED state accordingly
         elif self.path == '/toggle':
             global streaming_enabled
             streaming_enabled = not streaming_enabled
+            if streaming_enabled:
+                # Turn on LEDs: set to white light
+                for i in range(4):
+                    dots[i] = (255, 255, 255)
+            else:
+                # Turn off LEDs
+                for i in range(4):
+                    dots[i] = (0, 0, 0)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
