@@ -154,7 +154,7 @@ PAGE = """\
         width: 100% !important;
         height: 100% !important;
     }
-    /* New style for the snapshots link on the main page */
+    /* Style for the snapshots link on the main page */
     .snapshot-link {
          display: inline-block;
          padding: 10px 20px;
@@ -373,7 +373,6 @@ class StreamingOutput(io.BufferedIOBase):
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-            # Red color ranges
             lower_red1 = np.array([0, 120, 70])
             upper_red1 = np.array([10, 255, 255])
             lower_red2 = np.array([170, 120, 70])
@@ -381,7 +380,6 @@ class StreamingOutput(io.BufferedIOBase):
             mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
             mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
             full_mask = cv2.bitwise_or(mask1, mask2)
-            # Find and draw contours
             contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             self.red_count = 0
             for contour in contours:
@@ -389,7 +387,6 @@ class StreamingOutput(io.BufferedIOBase):
                     self.red_count += 1
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
-            # Encode modified image
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
         with self.condition:
@@ -463,7 +460,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Build a page listing each day's folder with averages and a centered layout.
+            # Build snapshots page with centered images and centered modal.
             html_content = """<html>
 <head>
   <title>Daily Snapshots</title>
@@ -471,15 +468,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     body { font-family: 'Roboto Condensed', sans-serif; margin: 20px; background: #f9f9f9; }
     h1 { text-align: center; }
     .day-container { background: #fff; margin-bottom: 30px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .stats { margin-bottom: 10px; }
+    .stats { margin-bottom: 10px; text-align: center; }
     .snapshots { display: flex; flex-wrap: wrap; justify-content: center; }
-    .snapshot { margin: 10px; border: 3px solid #ccc; cursor: pointer; }
+    .snapshot { margin: 10px; border: 3px solid #ccc; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
     .snapshot.outlier { border-color: #e74c3c; }
     .snapshot img { display: block; max-width: 200px; }
     .snapshot p { margin: 5px; font-size: 0.9em; text-align: center; }
     /* Modal styles */
-    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); }
-    .modal-content { margin: auto; display: block; max-width: 90%; max-height: 90%; }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); }
+    .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 90%; max-height: 90%; }
     .modal-close { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; }
   </style>
 </head>
@@ -511,9 +508,9 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums))
                 std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds))
                 html_content += f"""<div class="day-container">
-  <h2>{day}</h2>
+  <h2 style="text-align:center;">{day}</h2>
   <div class="stats">
-    <strong>Averages:</strong> Temp: {avg_temp:.1f} F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
+    <strong>Averages:</strong> Temp: {avg_temp:.1f}°F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
   </div>
   <div class="snapshots">"""
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
@@ -526,7 +523,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
   <img src="{image_url}">
   <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-     Temp: {rec['temperature']:.1f} F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+     Temp: {rec['temperature']:.1f}°F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
 </div>"""
                 html_content += "</div></div>"
             html_content += """
