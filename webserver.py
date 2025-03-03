@@ -713,8 +713,8 @@ def snapshot_loop():
         # Turn on LEDs first
         dots.fill((255, 255, 255))
         
-        # Let the LED light stabilize (optional but recommended)
-        time.sleep(0.05)
+        # Let the LED light stabilize 
+        time.sleep(3)
         
         # Capture frame WHILE LEDs are on
         with output.condition:
