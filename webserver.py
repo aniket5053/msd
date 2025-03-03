@@ -420,7 +420,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'streaming': streaming_enabled}).encode('utf-8'))
         elif self.path == '/snapshots':
-            # Build snapshots page with main theme styling and formatted day titles.
             html_content = """<html>
 <head>
   <title>Daily Snapshots</title>
@@ -454,22 +453,52 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
       margin-bottom: 20px;
       border-radius: 5px;
     }
-    .day-container {
-      background: #fff;
-      margin-bottom: 30px;
-      padding: 20px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      border-radius: 10px;
+    details {
+      border: 2px solid var(--hive-brown);
+      border-radius: 8px;
+      margin-bottom: 15px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-    .stats {
-      margin-bottom: 10px;
-      text-align: center;
-      font-size: 1.2em;
+    details[open] {
+      background: rgba(255, 179, 71, 0.05);
+    }
+    summary {
+      padding: 15px 20px;
+      background: var(--hive-brown);
+      color: var(--comb-yellow);
+      font-family: 'Honeybee', cursive;
+      font-size: 1.4em;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    summary::-webkit-details-marker {
+      display: none;
+    }
+    summary:after {
+      content: '▶';
+      transition: transform 0.2s;
+      color: var(--comb-yellow);
+      margin-left: 15px;
+    }
+    details[open] summary:after {
+      transform: rotate(90deg);
+    }
+    .day-stats {
+      font-family: 'Roboto Condensed', sans-serif;
+      font-size: 0.8em;
+      color: var(--comb-yellow);
+      margin-left: 20px;
     }
     .snapshots {
+      padding: 20px;
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
+      gap: 15px;
     }
     .snapshot {
       margin: 10px;
@@ -479,6 +508,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
       flex-direction: column;
       align-items: center;
       border-radius: 5px;
+      transition: transform 0.2s;
+    }
+    .snapshot:hover {
+      transform: translateY(-3px);
     }
     .snapshot.outlier {
       border-color: var(--alert-red);
@@ -492,8 +525,8 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
       margin: 5px;
       font-size: 0.9em;
       text-align: center;
+      color: var(--hive-brown);
     }
-    /* Modal styles */
     .modal {
       display: none;
       position: fixed;
@@ -526,8 +559,8 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
 </head>
 <body>
   <div class="container">
-    <div class="header">Daily Snapshots</div>
-"""
+    <div class="header">Daily Snapshots</div>"""
+
             # Loop over day folders
             for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
                 day_folder = os.path.join(SNAPSHOT_ROOT, day)
@@ -543,26 +576,32 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     records = []
                 if not records:
                     continue
+                
                 try:
                     human_date = datetime.strptime(day, "%Y%m%d").strftime("%d %B, %Y")
                 except Exception:
                     human_date = day
+                
                 temps = [r["temperature"] for r in records]
                 hums = [r["humidity"] for r in records]
                 reds = [r["red_count"] for r in records]
                 avg_temp = sum(temps)/len(temps)
                 avg_hum = sum(hums)/len(hums)
                 avg_red = sum(reds)/len(reds)
+                
+                html_content += f"""<details class="day-container">
+                  <summary>
+                    {human_date}
+                    <span class="day-stats">
+                      Avg: {avg_temp:.1f}°F | {avg_hum:.1f}% Hum | {avg_red:.1f} Red Dots
+                    </span>
+                  </summary>
+                  <div class="snapshots">"""
+                
                 std_temp = math.sqrt(sum((t - avg_temp)**2 for t in temps)/len(temps))
                 std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums))
                 std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds))
-                html_content += f"""<div class="day-container">
-      <div class="stats">
-        <strong>{human_date}</strong><br>
-        Averages: Temp: {avg_temp:.1f}F, Humidity: {avg_hum:.1f}%, Red Dot Count: {avg_red:.1f}
-      </div>
-      <div class="snapshots">
-      """
+                
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
                     outlier = (
                         rec["temperature"] > avg_temp + 2*std_temp or
@@ -571,14 +610,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     )
                     image_url = f"/snapshot/{day}/{rec['filename']}"
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
-        <img src="{image_url}">
-        <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
-           Temp: {rec['temperature']:.1f}F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
-      </div>"""
-                html_content += "</div></div>"
+                      <img src="{image_url}">
+                      <p>{time.strftime('%H:%M:%S', time.localtime(rec['timestamp']))}<br>
+                         Temp: {rec['temperature']:.1f}F, Hum: {rec['humidity']:.1f}%, Red: {rec['red_count']}</p>
+                    </div>"""
+                
+                html_content += "</div></details>"
+
             html_content += """
   </div>
-  <!-- Modal for full screen image -->
   <div id="myModal" class="modal" onclick="closeModal()">
     <span class="modal-close" onclick="closeModal()">&times;</span>
     <img class="modal-content" id="modalImage">
@@ -595,8 +635,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
     }
   </script>
 </body>
-</html>
-"""
+</html>"""
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
             self.end_headers()
@@ -659,7 +698,7 @@ def snapshot_loop():
     while True:
         time.sleep(60)  # Wait one minute
         dots.fill((255, 255, 255))
-        time.sleep(1) #change for 1 second
+        time.sleep(0.5)  # LED flash duration (changed from 0.1 to 0.5 seconds)
         with output.condition:
             frame_data = output.frame
         dots.fill((0, 0, 0))
