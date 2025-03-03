@@ -659,7 +659,7 @@ def snapshot_loop():
     while True:
         time.sleep(60)  # Wait one minute
         dots.fill((255, 255, 255))
-        time.sleep(0.1)
+        time.sleep(1)
         with output.condition:
             frame_data = output.frame
         dots.fill((0, 0, 0))
