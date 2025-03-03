@@ -707,31 +707,34 @@ def streaming_timeout_monitor():
 
 def snapshot_loop():
     global output
+    FLASH_DURATION = 5  # Seconds to keep LEDs on
     while True:
-        time.sleep(60)  # Wait one minute between snapshots
+        time.sleep(60)  # Wait between snapshots (60 seconds total cycle)
         
-        # Turn on LEDs first
+        # Turn on LEDs
         dots.fill((255, 255, 255))
         
-        # Let the LED light stabilize 
-        time.sleep(3)
+        # Keep LEDs on for full duration
+        start_time = time.time()
+        while (time.time() - start_time) < FLASH_DURATION:
+            # Capture frame during illumination
+            with output.condition:
+                output.condition.wait()
+                frame_data = output.frame
+            # Small sleep to prevent tight loop
+            time.sleep(0.01)
         
-        # Capture frame WHILE LEDs are on
-        with output.condition:
-            output.condition.wait()  # Wait for next frame
-            frame_data = output.frame
-        
-        # Immediately turn off LEDs after capture
+        # Turn off LEDs
         dots.fill((0, 0, 0))
         
-        # Process and save the image
+        # Process the LAST captured frame
         if frame_data is None:
             continue
         img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             continue
         
-        # Rest of the processing remains the same...
+        # Rest of processing remains the same...
         with data_lock:
             if sensor_data:
                 latest_sensor = sensor_data[-1]
