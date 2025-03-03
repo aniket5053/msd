@@ -713,7 +713,7 @@ def snapshot_loop():
         time.sleep(3)  # LED flash duration 
         with output.condition:
             frame_data = output.frame
-        dots.fill((0, 0, 0))
+        
         if frame_data is None:
             continue
         img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -724,6 +724,7 @@ def snapshot_loop():
                 latest_sensor = sensor_data[-1]
             else:
                 latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
+        dots.fill((0, 0, 0))
         red_count = output.get_red_count()
         overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
