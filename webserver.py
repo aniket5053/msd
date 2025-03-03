@@ -514,7 +514,19 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
       transform: translateY(-3px);
     }
     .snapshot.outlier {
-      border-color: var(--alert-red);
+        border: 4px solid var(--alert-red);
+        padding: 12px;
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+    }
+    .snapshot.outlier p {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: var(--alert-red);
+    }
+    .snapshot.outlier:hover {
+        transform: scale(1.08);
+        z-index: 1;
     }
     .snapshot img {
       display: block;
@@ -698,7 +710,7 @@ def snapshot_loop():
     while True:
         time.sleep(60)  # Wait one minute
         dots.fill((255, 255, 255))
-        time.sleep(1)  # LED flash duration 
+        time.sleep(3)  # LED flash duration 
         with output.condition:
             frame_data = output.frame
         dots.fill((0, 0, 0))
