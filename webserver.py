@@ -708,23 +708,35 @@ def streaming_timeout_monitor():
 def snapshot_loop():
     global output
     while True:
-        time.sleep(60)  # Wait one minute
+        time.sleep(60)  # Wait one minute between snapshots
+        
+        # Turn on LEDs first
         dots.fill((255, 255, 255))
-        time.sleep(3)  # LED flash duration 
+        
+        # Let the LED light stabilize (optional but recommended)
+        time.sleep(0.05)
+        
+        # Capture frame WHILE LEDs are on
         with output.condition:
+            output.condition.wait()  # Wait for next frame
             frame_data = output.frame
+        
+        # Immediately turn off LEDs after capture
         dots.fill((0, 0, 0))
+        
+        # Process and save the image
         if frame_data is None:
             continue
         img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             continue
+        
+        # Rest of the processing remains the same...
         with data_lock:
             if sensor_data:
                 latest_sensor = sensor_data[-1]
             else:
                 latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
-        
         red_count = output.get_red_count()
         overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
