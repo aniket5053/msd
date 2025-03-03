@@ -35,7 +35,7 @@ streaming_enabled = True
 streaming_start_time = time.time()  # streaming starts enabled
 
 # Store sensor readings with thread safety
-sensor_data = deque(maxlen=100)
+sensor_data = deque(maxlen=86400)
 data_lock = Lock()
 
 # Main page HTML with theme styling and a nicely styled snapshots link
