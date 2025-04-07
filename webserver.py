@@ -32,7 +32,7 @@ LED_enable = False
 
 # Global flag to control streaming and a timestamp for tracking its duration
 streaming_enabled = True
-streaming_start_time = time.time()  # streaming starts enabled
+streaming_start_time = time.time()
 
 # Store sensor readings with thread safety
 sensor_data = deque(maxlen=86400)
@@ -671,6 +671,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_error(404)
             self.end_headers()
 
+            
 class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -706,81 +707,99 @@ def streaming_timeout_monitor():
         time.sleep(1)
 
 def snapshot_loop():
-    global output
-    FLASH_DURATION = 5  # Seconds to keep LEDs on
+    global picam2, output
+    FLASH_DURATION = 5
     while True:
-        time.sleep(60)  # Wait between snapshots (60 seconds total cycle)
+        time.sleep(60)
         
-        # Turn on LEDs
-        dots.fill((255, 255, 255))
-        
-        # Keep LEDs on for full duration
-        start_time = time.time()
-        while (time.time() - start_time) < FLASH_DURATION:
-            # Capture frame during illumination
-            with output.condition:
-                output.condition.wait()
-                frame_data = output.frame
-            # Small sleep to prevent tight loop
-            time.sleep(0.01)
-        
-        # Turn off LEDs
-        dots.fill((0, 0, 0))
-        
-        # Process the LAST captured frame
-        if frame_data is None:
-            continue
-        img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if img is None:
-            continue
-        
-        # Rest of processing remains the same...
-        with data_lock:
-            if sensor_data:
-                latest_sensor = sensor_data[-1]
-            else:
-                latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
-        red_count = output.get_red_count()
-        overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        day_folder_name = time.strftime("%Y%m%d")
-        day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
-        os.makedirs(day_folder, exist_ok=True)
-        filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
-        file_path = os.path.join(day_folder, filename)
-        cv2.imwrite(file_path, img)
-        metadata_file = os.path.join(day_folder, "data.json")
-        record = {
-            "timestamp": time.time(),
-            "temperature": latest_sensor["temperature"],
-            "humidity": latest_sensor["humidity"],
-            "red_count": red_count,
-            "filename": filename
-        }
-        if os.path.exists(metadata_file):
-            try:
+        try:
+            # Switch to still configuration
+            picam2.stop_recording()
+            picam2.configure(still_config)
+            time.sleep(1)
+
+            # Capture still image
+            dots.fill((255, 255, 255))
+            request = picam2.capture_request()
+            img_array = request.make_array("main")
+            request.release()
+            img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+            # Process still image
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            lower_red1 = np.array([0, 120, 70])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 120, 70])
+            upper_red2 = np.array([180, 255, 255])
+            mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+            mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+            full_mask = cv2.bitwise_or(mask1, mask2)
+            contours, _ = cv2.findContours(full_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            red_count = 0
+            for contour in contours:
+                if cv2.contourArea(contour) > 500:
+                    red_count += 1
+                    x, y, w, h = cv2.boundingRect(contour)
+                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+
+            # Add overlay
+            with data_lock:
+                latest_sensor = sensor_data[-1] if sensor_data else {"temperature": 0, "humidity": 0}
+            
+            overlay_text = f"Temp: {latest_sensor['temperature']:.1f}F Hum: {latest_sensor['humidity']:.1f}% Red: {red_count}"
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+            cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+
+            # Save image
+            day_folder = os.path.join(SNAPSHOT_ROOT, time.strftime("%Y%m%d"))
+            os.makedirs(day_folder, exist_ok=True)
+            filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
+            cv2.imwrite(os.path.join(day_folder, filename), img)
+
+            # Save metadata
+            metadata_file = os.path.join(day_folder, "data.json")
+            record = {
+                "timestamp": time.time(),
+                "temperature": latest_sensor["temperature"],
+                "humidity": latest_sensor["humidity"],
+                "red_count": red_count,
+                "filename": filename
+            }
+            if os.path.exists(metadata_file):
                 with open(metadata_file, "r") as f:
                     records = json.load(f)
-            except Exception:
+            else:
                 records = []
-        else:
-            records = []
-        records.append(record)
-        with open(metadata_file, "w") as f:
-            json.dump(records, f)
+            records.append(record)
+            with open(metadata_file, "w") as f:
+                json.dump(records, f)
 
-# Initialize camera with square aspect ratio
+        except Exception as e:
+            logging.error("Snapshot error: %s", e)
+        finally:
+            # Restore video configuration
+            dots.fill((0, 0, 0))
+            picam2.stop_recording()
+            picam2.configure(video_config)
+            output = StreamingOutput()
+            picam2.start_recording(JpegEncoder(), FileOutput(output))
+
+# Initialize camera configurations
 picam2 = Picamera2()
-config = picam2.create_video_configuration({
-    'size': (2304, 1296),
-    'format': 'XRGB8888'
-})
-picam2.configure(config)
+video_config = picam2.create_video_configuration(
+    main={"size": (640, 640), "format": "XRGB8888"}
+)
+still_config = picam2.create_still_configuration(
+    main={"size": (2304, 1746), "format": "XRGB8888"}
+)
+
+# Start with video configuration
+picam2.configure(video_config)
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
+# Start threads
 sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
 sensor_thread.start()
 
