@@ -774,7 +774,7 @@ def snapshot_loop():
 # Initialize camera with square aspect ratio
 picam2 = Picamera2()
 config = picam2.create_video_configuration({
-    'size': (640, 640),
+    'size': (2304, 1296),
     'format': 'XRGB8888'
 })
 picam2.configure(config)
