@@ -38,7 +38,7 @@ streaming_start_time = time.time()
 sensor_data = deque(maxlen=86400)
 data_lock = Lock()
 
-# Main page HTML with theme styling and a nicely styled snapshots link
+# Main page HTML
 PAGE = """\
 <html>
 <head>
@@ -155,7 +155,6 @@ PAGE = """\
         height: 100% !important;
     }
     
-    /* Styled snapshots link */
     .snapshot-link {
          display: inline-block;
          padding: 10px 20px;
@@ -169,6 +168,19 @@ PAGE = """\
     }
     .snapshot-link:hover {
          background: #f39c12;
+    }
+    
+    button {
+        padding: 8px 16px;
+        background: var(--healthy-green);
+        border: none;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+    button:hover {
+        background: #6ab04c;
     }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -328,8 +340,11 @@ class StreamingOutput(io.BufferedIOBase):
         self.frame = None
         self.condition = Condition()
         self.red_count = 0
+        self.active = True
 
     def write(self, buf):
+        if not self.active:
+            return
         img = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is not None:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -355,6 +370,11 @@ class StreamingOutput(io.BufferedIOBase):
 
     def get_red_count(self):
         return self.red_count
+    
+    def reset(self):
+        with self.condition:
+            self.frame = None
+            self.red_count = 0
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -573,7 +593,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
   <div class="container">
     <div class="header">Daily Snapshots</div>"""
 
-            # Loop over day folders
             for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
                 day_folder = os.path.join(SNAPSHOT_ROOT, day)
                 if not os.path.isdir(day_folder):
@@ -597,9 +616,9 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 temps = [r["temperature"] for r in records]
                 hums = [r["humidity"] for r in records]
                 reds = [r["red_count"] for r in records]
-                avg_temp = sum(temps)/len(temps)
-                avg_hum = sum(hums)/len(hums)
-                avg_red = sum(reds)/len(reds)
+                avg_temp = sum(temps)/len(temps) if temps else 0
+                avg_hum = sum(hums)/len(hums) if hums else 0
+                avg_red = sum(reds)/len(reds) if reds else 0
                 
                 html_content += f"""<details class="day-container">
                   <summary>
@@ -610,15 +629,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                   </summary>
                   <div class="snapshots">"""
                 
-                std_temp = math.sqrt(sum((t - avg_temp)**2 for t in temps)/len(temps))
-                std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums))
-                std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds))
+                std_temp = math.sqrt(sum((t - avg_temp)**2 for t in temps)/len(temps)) if len(temps) > 1 else 0
+                std_hum = math.sqrt(sum((h - avg_hum)**2 for h in hums)/len(hums)) if len(hums) > 1 else 0
+                std_red = math.sqrt(sum((r - avg_red)**2 for r in reds)/len(reds)) if len(reds) > 1 else 0
                 
                 for rec in sorted(records, key=lambda x: x["timestamp"], reverse=True):
                     outlier = (
-                        rec["temperature"] > avg_temp + 2*std_temp or
-                        rec["humidity"] > avg_hum + 2*std_hum or
-                        rec["red_count"] > avg_red + 2*std_red
+                        (rec["temperature"] > avg_temp + 2*std_temp) if std_temp else False or
+                        (rec["humidity"] > avg_hum + 2*std_hum) if std_hum else False or
+                        (rec["red_count"] > avg_red + 2*std_red) if std_red else False
                     )
                     image_url = f"/snapshot/{day}/{rec['filename']}"
                     html_content += f"""<div class="snapshot{' outlier' if outlier else ''}" onclick="openModal('{image_url}')">
@@ -671,7 +690,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_error(404)
             self.end_headers()
 
-            
 class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -713,6 +731,9 @@ def snapshot_loop():
         time.sleep(60)
         
         try:
+            # Pause streaming output
+            output.active = False
+            
             # Switch to still configuration
             picam2.stop_recording()
             picam2.configure(still_config)
@@ -742,7 +763,7 @@ def snapshot_loop():
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
 
-            # Add overlay
+            # Add overlay text
             with data_lock:
                 latest_sensor = sensor_data[-1] if sensor_data else {"temperature": 0, "humidity": 0}
             
@@ -753,9 +774,20 @@ def snapshot_loop():
 
             # Save image
             day_folder = os.path.join(SNAPSHOT_ROOT, time.strftime("%Y%m%d"))
-            os.makedirs(day_folder, exist_ok=True)
+            try:
+                os.makedirs(day_folder, exist_ok=True)
+            except Exception as e:
+                logging.error("Directory creation failed: %s", e)
+
             filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
-            cv2.imwrite(os.path.join(day_folder, filename), img)
+            file_path = os.path.join(day_folder, filename)
+            
+            try:
+                success = cv2.imwrite(file_path, img)
+                if not success:
+                    logging.error("Failed to write image to %s", file_path)
+            except Exception as e:
+                logging.error("Image save error: %s", e)
 
             # Save metadata
             metadata_file = os.path.join(day_folder, "data.json")
@@ -766,23 +798,32 @@ def snapshot_loop():
                 "red_count": red_count,
                 "filename": filename
             }
-            if os.path.exists(metadata_file):
-                with open(metadata_file, "r") as f:
-                    records = json.load(f)
-            else:
-                records = []
-            records.append(record)
-            with open(metadata_file, "w") as f:
-                json.dump(records, f)
+            try:
+                if os.path.exists(metadata_file):
+                    with open(metadata_file, "r") as f:
+                        records = json.load(f)
+                else:
+                    records = []
+                records.append(record)
+                with open(metadata_file, "w") as f:
+                    json.dump(records, f)
+            except Exception as e:
+                logging.error("Metadata save error: %s", e)
 
         except Exception as e:
             logging.error("Snapshot error: %s", e)
         finally:
             # Restore video configuration
             dots.fill((0, 0, 0))
-            picam2.stop_recording()
+            try:
+                picam2.stop_recording()
+            except:
+                pass
+            
+            # Reconfigure video with existing output
             picam2.configure(video_config)
-            output = StreamingOutput()
+            output.reset()
+            output.active = True
             picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 # Initialize camera configurations
@@ -795,8 +836,8 @@ still_config = picam2.create_still_configuration(
 )
 
 # Start with video configuration
-picam2.configure(video_config)
 output = StreamingOutput()
+picam2.configure(video_config)
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 # Start threads
