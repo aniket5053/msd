@@ -408,11 +408,11 @@ class CameraManager:
                     logging.info(f"Image array created with shape: {array.shape}")
                     
                     # Convert to BGR and rotate 180 degrees
-                    img = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+                    img = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
                     img = cv2.rotate(img, cv2.ROTATE_180)
                     
                     # Apply red color correction
-                    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+                    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
                     lower_red = np.array([0, 120, 70])
                     upper_red = np.array([10, 255, 255])
                     lower_red2 = np.array([170, 120, 70])
@@ -424,7 +424,7 @@ class CameraManager:
                     )
                     
                     # Apply the mask to enhance red colors
-                    img[mask > 0] = [0, 0, 255]  # Set red pixels to pure red
+                    img[mask > 0] = [255, 0, 0]  # Set red pixels to pure red in RGB
                     
                     logging.info("Image processed and color corrected")
                     
@@ -449,14 +449,6 @@ class CameraManager:
                 logging.error(f"Error in capture_still: {str(e)}")
                 dots.fill((0, 0, 0))  # Ensure LEDs are turned off even if capture fails
                 return None
-            finally:
-                # Stop the camera after capture
-                try:
-                    if self.picam2.started:
-                        self.picam2.stop()
-                        logging.info("Camera stopped after capture")
-                except Exception as e:
-                    logging.error(f"Error stopping camera after capture: {str(e)}")
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
