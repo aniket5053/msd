@@ -402,9 +402,10 @@ class CameraManager:
                     array = request.make_array("main")
                     logging.info(f"Image array created with shape: {array.shape}")
                     
-                    # Convert to BGR
+                    # Convert to BGR and rotate 180 degrees
                     img = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
-                    logging.info("Image converted to BGR")
+                    img = cv2.rotate(img, cv2.ROTATE_180)
+                    logging.info("Image converted to BGR and rotated 180 degrees")
                     
                     # Release the request
                     request.release()
