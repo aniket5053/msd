@@ -37,178 +37,284 @@ sensor_data = deque(maxlen=86400)
 data_lock = Lock()
 camera_lock = RLock()
 
-PAGE = """<!DOCTYPE html>
+PAGE = """\
 <html>
 <head>
-    <title>HiveHealth Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Honeybee&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --honey-gold: #FFB347;
-            --hive-brown: #6B4423;
-            --comb-yellow: #F4D03F;
-            --healthy-green: #82C341;
-            --alert-red: #E74C3C;
-        }
-        body {
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(45deg, #fff5e6, #fff);
-            font-family: 'Roboto Condensed', sans-serif;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background: var(--hive-brown);
-            padding: 1rem;
-            color: var(--comb-yellow);
-            text-align: center;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        .video-container {
-            position: relative;
-            width: 640px;  /* Match stream width */
-            height: 640px; /* Match stream height */
-            margin: 0 auto;
-            background: var(--hive-brown);
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .video-feed {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1); /* Flip the video horizontally */
-        }
-        .metrics {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .metric {
-            padding: 15px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            min-width: 150px;
-            text-align: center;
-        }
-        .chart-container {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        .snapshot-link {
-            display: inline-block;
-            padding: 10px 20px;
-            background: var(--comb-yellow);
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: background 0.3s;
-        }
-        .snapshot-link:hover {
-            background: #f39c12;
-        }
-        button {
-            padding: 10px 20px;
-            background: var(--healthy-green);
-            border: none;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        let chart;
-        function initChart() {
-            const ctx = document.getElementById('chart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Temperature (°F)',
+<title>HiveHealth Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Honeybee&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --honey-gold: #FFB347;
+        --hive-brown: #6B4423;
+        --comb-yellow: #F4D03F;
+        --healthy-green: #82C341;
+        --alert-red: #E74C3C;
+    }
+    
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: 'Roboto Condensed', sans-serif;
+        background: linear-gradient(45deg, #fff5e6, #fff);
+        overflow: hidden;
+    }
+    
+    .container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 0L100 50L50 100L0 50L50 0' fill='%23FFB347' fill-opacity='0.05'/%3E%3C/svg%3E");
+    }
+    
+    .header {
+        background: var(--hive-brown);
+        padding: 1rem 2rem;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .logo {
+        font-family: 'Honeybee', cursive;
+        font-size: 2.5rem;
+        color: var(--comb-yellow);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .video-section {
+        width: 90%;
+        aspect-ratio: 1 / 1;
+        background: var(--hive-brown);
+        position: relative;
+        overflow: hidden;
+        border-radius: 16px;
+        margin: 1rem auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    
+    .status-bar {
+        position: absolute;
+        bottom: 1.5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 1.5rem;
+        z-index: 1;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .metric {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1.1rem;
+        color: var(--hive-brown);
+    }
+    
+    .metric-icon {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .metric.green { color: var(--healthy-green); }
+    .metric.red { color: var(--alert-red); }
+    .metric.blue { color: #3498db; }
+    
+    .graph-section {
+        height: 40vh;
+        padding: 0 1.5rem 1.5rem;
+    }
+    
+    .chart-container {
+        height: 100%;
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    
+    .video-feed {
+        position: absolute;
+        height: 100%;
+        width: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        border-radius: 8px;
+    }
+    
+    #sensorChart {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    
+    /* Styled snapshots link */
+    .snapshot-link {
+         display: inline-block;
+         padding: 10px 20px;
+         background: var(--comb-yellow);
+         color: #fff;
+         text-decoration: none;
+         border-radius: 5px;
+         font-size: 1.2em;
+         transition: background 0.3s ease;
+         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .snapshot-link:hover {
+         background: #f39c12;
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script>
+    let sensorChart;
+    function updateMetrics() {
+        fetch('/sensors')
+        .then(r => r.json())
+        .then(data => {
+            if(data.length > 0) {
+                const latest = data[data.length - 1];
+                document.getElementById('temp').textContent = latest.temperature.toFixed(1);
+                document.getElementById('hum').textContent = latest.humidity.toFixed(1);
+            }
+        });
+        fetch('/count')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('red-count').textContent = data.count;
+        });
+    }
+    function initChart() {
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const gradientTemp = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientTemp.addColorStop(0, 'rgba(255, 179, 71, 0.4)');
+        gradientTemp.addColorStop(1, 'rgba(255, 179, 71, 0)');
+        const gradientHum = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientHum.addColorStop(0, 'rgba(52, 152, 219, 0.4)');
+        gradientHum.addColorStop(1, 'rgba(52, 152, 219, 0)');
+        sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Temperature (F)',
+                    borderColor: '#FFB347',
+                    backgroundColor: gradientTemp,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    borderWidth: 2,
+                    fill: true
+                },{
+                    label: 'Humidity (%)',
+                    borderColor: '#3498db',
+                    backgroundColor: gradientHum,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    borderWidth: 2,
+                    fill: true
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', intersect: false },
+                plugins: {
+                    tooltip: {
+                        backgroundColor: 'rgba(107, 68, 35, 0.95)',
+                        titleColor: '#FFB347',
+                        bodyColor: '#fff',
                         borderColor: '#FFB347',
-                        tension: 0.3
-                    }, {
-                        label: 'Humidity (%)',
-                        borderColor: '#3498db',
-                        tension: 0.3
-                    }]
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            title: (context) => {
+                                const date = new Date(context[0].parsed.x);
+                                return date.toLocaleTimeString();
+                            },
+                            label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`
+                        }
+                    },
+                    legend: {
+                        labels: { color: '#6B4423', font: { size: 14 }, boxWidth: 20, padding: 20 },
+                        position: 'top'
+                    },
+                    zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true }, mode: 'x' } }
                 },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { type: 'time', time: { tooltipFormat: 'HH:mm' } },
-                        y: { beginAtZero: true }
-                    }
+                scales: {
+                    x: { type: 'time', time: { tooltipFormat: 'HH:mm' }, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6B4423', font: { size: 12 } } },
+                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6B4423', font: { size: 12 } } }
                 }
-            });
-        }
-        function updateMetrics() {
-            fetch('/sensors')
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('temp').textContent = data.temperature.toFixed(1);
-                    document.getElementById('hum').textContent = data.humidity.toFixed(1);
-                    document.getElementById('count').textContent = data.count;
-                    
-                    chart.data.datasets[0].data = data.history.map(d => ({
-                        x: d.time * 1000,
-                        y: d.temperature
-                    }));
-                    chart.data.datasets[1].data = data.history.map(d => ({
-                        x: d.time * 1000,
-                        y: d.humidity
-                    }));
-                    chart.update();
-                });
-        }
-        function toggleStream() {
-            fetch('/toggle')
-                .then(() => updateMetrics());
-        }
+            }
+        });
+    }
+    function updateChart() {
+        fetch('/sensors')
+        .then(r => r.json())
+        .then(data => {
+            sensorChart.data.datasets[0].data = data.map(d => ({x: d.time*1000, y: d.temperature}));
+            sensorChart.data.datasets[1].data = data.map(d => ({x: d.time*1000, y: d.humidity}));
+            sensorChart.update();
+        });
+    }
+    function toggleStream() {
+        fetch('/toggle')
+        .then(response => response.json())
+        .then(data => {
+            const btn = document.getElementById('toggleStreamBtn');
+            btn.textContent = data.streaming ? "Disable Stream" : "Enable Stream";
+        });
+    }
+    window.addEventListener('load', () => {
+        initChart();
         setInterval(updateMetrics, 1000);
-        window.onload = initChart;
-    </script>
+        setInterval(updateChart, 10000);
+    });
+</script>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🐝 Hive Health Monitor</h1>
+            <div class="logo">
+                <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C14.65 2 17.2 3.05 19.07 4.93C20.95 6.8 22 9.35 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2"/>
+                </svg>
+                HiveHealth
+            </div>
         </div>
-        
-        <div class="video-container">
+        <div class="video-section">
+            <div class="status-bar">
+                <div class="metric green">
+                    <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,15A2,2 0 0,1 14,17A2,2 0 0,1 12,19A2,2 0 0,1 10,17"/>
+                    </svg>
+                    <span id="temp">-</span>F
+                </div>
+                <div class="metric blue">
+                    <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,3.25C12,3.25 6,10 6,14"/>
+                    </svg>
+                    <span id="hum">-</span>%
+                </div>
+                <div class="metric red">
+                    <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,2A10,10 0 0,0 2,12"/>
+                    </svg>
+                    <span id="red-count">0</span>
+                </div>
+                <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
+            </div>
             <img class="video-feed" src="stream.mjpg" />
         </div>
-        
-        <div class="metrics">
-            <div class="metric">
-                <h3>Temperature</h3>
-                <div id="temp">--</div>°F
-            </div>
-            <div class="metric">
-                <h3>Humidity</h3>
-                <div id="hum">--</div>%
-            </div>
-            <div class="metric">
-                <h3>Activity</h3>
-                <div id="count">0</div>
+        <div class="graph-section">
+            <div class="chart-container">
+                <canvas id="sensorChart"></canvas>
             </div>
         </div>
-        
-        <button onclick="toggleStream()">Toggle Stream</button>
-        <a href="/snapshots" class="snapshot-link">View Snapshots</a>
-        
-        <div class="chart-container">
-            <canvas id="chart"></canvas>
+        <div style="text-align:center; margin: 1rem;">
+            <a href="/snapshots" target="_blank" class="snapshot-link">View Snapshots</a>
         </div>
     </div>
 </body>
