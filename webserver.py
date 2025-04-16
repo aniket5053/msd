@@ -250,17 +250,23 @@ class CameraManager:
             try:
                 if self.picam2.started:
                     self.picam2.stop_recording()
+                    time.sleep(0.5)  # Give time for camera to settle
+                
+                # Configure for still capture
                 self.picam2.configure(self.still_config)
+                time.sleep(0.5)  # Give time for camera to adjust to new settings
+                
                 self.current_mode = "still"
                 logging.info("Successfully switched to still mode")
                 return True
             except Exception as e:
-                logging.error("Still mode switch failed: %s", e)
+                logging.error(f"Still mode switch failed: {str(e)}")
                 return False
 
     def capture_still(self):
         with camera_lock:
             if self.current_mode != "still":
+                logging.error("Camera not in still mode")
                 return None
             
             try:
@@ -268,8 +274,15 @@ class CameraManager:
                 dots.fill((255, 255, 255))
                 time.sleep(0.1)  # Small delay to ensure LEDs are on
                 
+                # Capture the image
+                logging.info("Attempting to capture still image")
                 request = self.picam2.capture_request()
+                logging.info("Capture request successful")
+                
+                # Convert and process the image
                 img = cv2.cvtColor(request.make_array("main"), cv2.COLOR_RGB2BGR)
+                logging.info(f"Image captured with shape: {img.shape}")
+                
                 request.release()
                 
                 # Turn off LEDs immediately after capture
@@ -525,14 +538,19 @@ def snapshot_loop():
         time.sleep(SNAPSHOT_INTERVAL)
         
         try:
+            logging.info("Starting snapshot process")
+            
             if not camera_manager.switch_to_still():
                 logging.error("Failed to switch to still mode")
                 continue
-                
+            
+            logging.info("Camera switched to still mode, attempting capture")
             img = camera_manager.capture_still()
             if img is None:
                 logging.error("Failed to capture still image")
                 continue
+            
+            logging.info("Image captured successfully, processing...")
             
             # Add overlay
             with data_lock:
@@ -553,11 +571,13 @@ def snapshot_loop():
             filename = f"snapshot_{datetime.now().strftime('%H%M%S')}.jpg"
             filepath = os.path.join(date_folder, filename)
             
-            # Save the image
+            logging.info(f"Attempting to save image to {filepath}")
             success = cv2.imwrite(filepath, img)
             if not success:
                 logging.error(f"Failed to save image to {filepath}")
                 continue
+            
+            logging.info("Image saved successfully, updating metadata")
             
             # Save metadata
             metadata = {
@@ -587,6 +607,7 @@ def snapshot_loop():
             logging.error(f"Snapshot error: {str(e)}")
         finally:
             if streaming_enabled:
+                logging.info("Switching back to video mode")
                 camera_manager.switch_to_video()
 
 if __name__ == "__main__":
