@@ -71,18 +71,18 @@ PAGE = """<!DOCTYPE html>
         }
         .video-container {
             position: relative;
-            width: 100%;
-            padding-top: 56.25%; /* 16:9 aspect ratio */
+            width: 640px;  /* Match stream width */
+            height: 640px; /* Match stream height */
+            margin: 0 auto;
             background: var(--hive-brown);
             border-radius: 10px;
             overflow: hidden;
         }
         .video-feed {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Flip the video horizontally */
         }
         .metrics {
             display: flex;
@@ -362,6 +362,9 @@ class StreamingOutput(io.BufferedIOBase):
                     self.red_count += 1
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+            
+            # Flip the image horizontally
+            img = cv2.flip(img, 1)
             
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
