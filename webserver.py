@@ -237,6 +237,7 @@ class CameraManager:
                 self.picam2.configure(self.video_config)
                 self.picam2.start_recording(JpegEncoder(), FileOutput(self.output))
                 self.current_mode = "video"
+                logging.info("Successfully switched to video mode")
             except Exception as e:
                 logging.error("Video mode switch failed: %s", e)
                 raise
@@ -251,6 +252,7 @@ class CameraManager:
                     self.picam2.stop_recording()
                 self.picam2.configure(self.still_config)
                 self.current_mode = "still"
+                logging.info("Successfully switched to still mode")
                 return True
             except Exception as e:
                 logging.error("Still mode switch failed: %s", e)
@@ -388,6 +390,11 @@ class StreamingHandler(BaseHTTPRequestHandler):
     def toggle_stream(self):
         global streaming_enabled
         streaming_enabled = not streaming_enabled
+        if streaming_enabled:
+            dots.fill((255, 255, 255))  # Turn LEDs on
+            camera_manager.switch_to_video()  # Ensure camera is in video mode
+        else:
+            dots.fill((0, 0, 0))  # Turn LEDs off
         self.send_json({"success": True})
 
     def serve_snapshots(self):
@@ -558,7 +565,8 @@ def snapshot_loop():
         except Exception as e:
             logging.error("Snapshot error: %s", e)
         finally:
-            camera_manager.switch_to_video()
+            if streaming_enabled:  # Only switch back to video if streaming is enabled
+                camera_manager.switch_to_video()
 
 if __name__ == "__main__":
     logging.basicConfig(
