@@ -22,16 +22,7 @@ from picamera2.outputs import FileOutput
 # Configuration
 SNAPSHOT_ROOT = "snapshots"
 STREAM_CONFIG = {"size": (640, 640), "format": "XRGB8888"}
-STILL_CONFIG = {
-    "size": (2304, 1746),
-    "format": "XRGB8888",
-    "controls": {
-        "AfMode": 1,  # Auto focus mode
-        "AfRange": 0,  # Full range
-        "AfSpeed": 0,  # Normal speed
-        "AfTrigger": 0  # Start AF
-    }
-}
+STILL_CONFIG = {"size": (2304, 1746), "format": "XRGB8888"}
 SNAPSHOT_INTERVAL = 60  # seconds
 PORT = 7123
 
@@ -377,8 +368,13 @@ class CameraManager:
                 self.picam2.start()
                 time.sleep(1.0)  # Increased wait time to ensure camera is fully started
                 
-                # Trigger autofocus
-                self.picam2.set_controls({"AfTrigger": 1})
+                # Set autofocus controls
+                self.picam2.set_controls({
+                    "AfMode": 1,  # Auto focus mode
+                    "AfRange": 0,  # Full range
+                    "AfSpeed": 0,  # Normal speed
+                    "AfTrigger": 1  # Trigger autofocus
+                })
                 time.sleep(0.5)  # Give time for autofocus to complete
                 
                 # Verify camera is actually started
@@ -420,7 +416,7 @@ class CameraManager:
                     array = request.make_array("main")
                     logging.info(f"Image array created with shape: {array.shape}")
                     
-                    # Convert to RGB and rotate 180 degrees
+                    # Convert to BGR and rotate 180 degrees
                     img = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
                     img = cv2.rotate(img, cv2.ROTATE_180)
                     
@@ -447,9 +443,6 @@ class CameraManager:
                     
                     # Turn off LEDs
                     dots.fill((0, 0, 0))
-                    
-                    # Convert back to BGR for saving
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                     
                     return img
                 except Exception as e:
