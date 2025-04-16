@@ -221,9 +221,11 @@ class CameraManager:
         self.output = StreamingOutput()
         self.current_mode = None
         
+        # Initialize both configurations
         self.video_config = self.picam2.create_video_configuration(main=STREAM_CONFIG)
         self.still_config = self.picam2.create_still_configuration(main=STILL_CONFIG)
         
+        # Start with video mode
         self.switch_to_video()
 
     def switch_to_video(self):
@@ -239,7 +241,7 @@ class CameraManager:
                 self.current_mode = "video"
                 logging.info("Successfully switched to video mode")
             except Exception as e:
-                logging.error("Video mode switch failed: %s", e)
+                logging.error(f"Video mode switch failed: {str(e)}")
                 raise
 
     def switch_to_still(self):
@@ -255,6 +257,10 @@ class CameraManager:
                 # Configure for still capture
                 self.picam2.configure(self.still_config)
                 time.sleep(0.5)  # Give time for camera to adjust to new settings
+                
+                # Start the camera in still mode
+                self.picam2.start()
+                time.sleep(0.5)  # Give time for camera to start
                 
                 self.current_mode = "still"
                 logging.info("Successfully switched to still mode")
@@ -276,22 +282,53 @@ class CameraManager:
                 
                 # Capture the image
                 logging.info("Attempting to capture still image")
-                request = self.picam2.capture_request()
-                logging.info("Capture request successful")
                 
-                # Convert and process the image
-                img = cv2.cvtColor(request.make_array("main"), cv2.COLOR_RGB2BGR)
-                logging.info(f"Image captured with shape: {img.shape}")
+                if not self.picam2.started:
+                    logging.error("Camera not started in still mode")
+                    return None
                 
-                request.release()
+                try:
+                    # Create capture request
+                    request = self.picam2.capture_request()
+                    logging.info("Capture request created")
+                    
+                    # Get the image data
+                    array = request.make_array("main")
+                    logging.info(f"Image array created with shape: {array.shape}")
+                    
+                    # Convert to BGR
+                    img = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+                    logging.info("Image converted to BGR")
+                    
+                    # Release the request
+                    request.release()
+                    logging.info("Capture request released")
+                    
+                    # Turn off LEDs
+                    dots.fill((0, 0, 0))
+                    
+                    return img
+                except Exception as e:
+                    logging.error(f"Error during capture process: {str(e)}")
+                    if 'request' in locals():
+                        try:
+                            request.release()
+                        except:
+                            pass
+                    return None
                 
-                # Turn off LEDs immediately after capture
-                dots.fill((0, 0, 0))
-                return img
             except Exception as e:
-                logging.error(f"Error capturing still image: {str(e)}")
+                logging.error(f"Error in capture_still: {str(e)}")
                 dots.fill((0, 0, 0))  # Ensure LEDs are turned off even if capture fails
                 return None
+            finally:
+                # Stop the camera after capture
+                try:
+                    if self.picam2.started:
+                        self.picam2.stop()
+                        logging.info("Camera stopped after capture")
+                except Exception as e:
+                    logging.error(f"Error stopping camera after capture: {str(e)}")
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
