@@ -366,7 +366,12 @@ class CameraManager:
                 
                 # Start the camera in still mode
                 self.picam2.start()
-                time.sleep(0.5)  # Give time for camera to start
+                time.sleep(1.0)  # Increased wait time to ensure camera is fully started
+                
+                # Verify camera is actually started
+                if not self.picam2.started:
+                    logging.error("Camera failed to start in still mode")
+                    return False
                 
                 self.current_mode = "still"
                 logging.info("Successfully switched to still mode")
@@ -405,7 +410,23 @@ class CameraManager:
                     # Convert to BGR and rotate 180 degrees
                     img = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
                     img = cv2.rotate(img, cv2.ROTATE_180)
-                    logging.info("Image converted to BGR and rotated 180 degrees")
+                    
+                    # Apply red color correction
+                    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+                    lower_red = np.array([0, 120, 70])
+                    upper_red = np.array([10, 255, 255])
+                    lower_red2 = np.array([170, 120, 70])
+                    upper_red2 = np.array([180, 255, 255])
+                    
+                    mask = cv2.bitwise_or(
+                        cv2.inRange(hsv, lower_red, upper_red),
+                        cv2.inRange(hsv, lower_red2, upper_red2)
+                    )
+                    
+                    # Apply the mask to enhance red colors
+                    img[mask > 0] = [0, 0, 255]  # Set red pixels to pure red
+                    
+                    logging.info("Image processed and color corrected")
                     
                     # Release the request
                     request.release()
