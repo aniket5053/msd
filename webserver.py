@@ -8,7 +8,7 @@ import os
 import math
 from collections import deque
 from datetime import datetime
-from http import server
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Condition, Lock, RLock
 import cv2
 import numpy as np
@@ -316,7 +316,7 @@ class StreamingOutput(io.BufferedIOBase):
     def get_red_count(self):
         return self.red_count
 
-class StreamingHandler(server.BaseHTTPRequestHandler):
+class StreamingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             if self.path == '/':
@@ -555,7 +555,7 @@ if __name__ == "__main__":
         threading.Thread(target=sensor_loop, daemon=True).start()
         threading.Thread(target=snapshot_loop, daemon=True).start()
 
-        class ThreadedHTTPServer(socketserver.ThreadingMixIn, server.HTTPServer):
+        class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
             pass
 
         server = ThreadedHTTPServer(('', PORT), StreamingHandler)
