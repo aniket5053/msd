@@ -278,7 +278,7 @@ class StreamingOutput(io.BufferedIOBase):
         self.active = True
 
     def write(self, buf):
-        if not self.active:
+        if not self.active or not streaming_enabled:
             return
         
         try:
@@ -396,9 +396,33 @@ class StreamingHandler(BaseHTTPRequestHandler):
             <style>
                 .day { margin: 20px; padding: 10px; border: 1px solid #ccc; }
                 .snapshot { display: inline-block; margin: 10px; text-align: center; }
-                img { max-width: 300px; margin: 5px; }
+                img { max-width: 300px; margin: 5px; cursor: pointer; }
+                .modal { display: none; position: fixed; z-index: 1; padding-top: 100px; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); }
+                .modal-content { margin: auto; display: block; max-width: 90%; max-height: 90%; }
+                .close { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; }
             </style>
-            </head><body><h1>Daily Snapshots</h1>"""
+            <script>
+                function openModal(img) {
+                    var modal = document.getElementById('imageModal');
+                    var modalImg = document.getElementById('modalImage');
+                    modal.style.display = "block";
+                    modalImg.src = img.src;
+                }
+                function closeModal() {
+                    document.getElementById('imageModal').style.display = "none";
+                }
+                window.onclick = function(event) {
+                    var modal = document.getElementById('imageModal');
+                    if (event.target == modal) {
+                        closeModal();
+                    }
+                }
+            </script>
+            </head><body><h1>Daily Snapshots</h1>
+            <div id="imageModal" class="modal">
+                <span class="close" onclick="closeModal()">&times;</span>
+                <img class="modal-content" id="modalImage">
+            </div>"""
         
         for day in sorted(os.listdir(SNAPSHOT_ROOT), reverse=True):
             day_path = os.path.join(SNAPSHOT_ROOT, day)
@@ -416,7 +440,7 @@ class StreamingHandler(BaseHTTPRequestHandler):
             for record in records:
                 html += f"""
                 <div class="snapshot">
-                    <img src="/snapshot/{day}/{record["filename"]}">
+                    <img src="/snapshot/{day}/{record["filename"]}" onclick="openModal(this)">
                     <div>{datetime.fromtimestamp(record["timestamp"]).strftime('%H:%M:%S')}</div>
                     <div>Temp: {record["temperature"]:.1f}°F</div>
                     <div>Humidity: {record["humidity"]:.1f}%</div>
