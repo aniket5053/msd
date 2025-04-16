@@ -381,6 +381,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             }
         self.send_json(data)
 
+    def serve_red_count(self):
+        count = camera_manager.output.get_red_count()
+        self.send_json({"count": count})
+
     def toggle_stream(self):
         global streaming_enabled
         streaming_enabled = not streaming_enabled
@@ -430,19 +434,23 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         try:
             path_parts = self.path.split('/')[2:]
             if len(path_parts) < 2:
-                raise ValueError
+                raise ValueError("Invalid path format")
                 
             file_path = os.path.join(SNAPSHOT_ROOT, *path_parts)
             if not os.path.exists(file_path):
-                raise FileNotFoundError
+                raise FileNotFoundError(f"Snapshot not found: {file_path}")
                 
             self.send_response(200)
             self.send_header('Content-Type', 'image/jpeg')
             with open(file_path, 'rb') as f:
                 self.end_headers()
                 self.wfile.write(f.read())
-        except:
+        except (ValueError, FileNotFoundError) as e:
+            logging.warning(f"Failed to serve snapshot: {str(e)}")
             self.send_error(404)
+        except Exception as e:
+            logging.error(f"Unexpected error serving snapshot: {str(e)}")
+            self.send_error(500)
 
     def send_json(self, data):
         self.send_response(200)
@@ -538,21 +546,39 @@ if __name__ == "__main__":
         ]
     )
 
-    camera_manager = CameraManager()
-    
-    threading.Thread(target=sensor_loop, daemon=True).start()
-    threading.Thread(target=snapshot_loop, daemon=True).start()
-
-    server = socketserver.ThreadingMixIn(server.HTTPServer)
-    server.daemon_threads = True
-    server = server(('', PORT), StreamingHandler)
+    camera_manager = None
+    server = None
     
     try:
+        camera_manager = CameraManager()
+        
+        threading.Thread(target=sensor_loop, daemon=True).start()
+        threading.Thread(target=snapshot_loop, daemon=True).start()
+
+        class ThreadedHTTPServer(socketserver.ThreadingMixIn, server.HTTPServer):
+            pass
+
+        server = ThreadedHTTPServer(('', PORT), StreamingHandler)
+        server.daemon_threads = True
+        
         logging.info(f"Server started on port {PORT}")
         server.serve_forever()
     except KeyboardInterrupt:
         logging.info("Shutting down")
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}")
     finally:
-        camera_manager.picam2.stop_recording()
-        camera_manager.picam2.close()
-        server.server_close()
+        if camera_manager:
+            try:
+                camera_manager.picam2.stop_recording()
+                camera_manager.picam2.close()
+            except Exception as e:
+                logging.error(f"Error closing camera: {str(e)}")
+        
+        if server:
+            try:
+                server.server_close()
+            except Exception as e:
+                logging.error(f"Error closing server: {str(e)}")
+        
+        logging.info("Cleanup complete")
