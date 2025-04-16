@@ -22,7 +22,12 @@ from picamera2.outputs import FileOutput
 # Configuration
 SNAPSHOT_ROOT = "snapshots"
 STREAM_CONFIG = {"size": (640, 640), "format": "XRGB8888"}
-STILL_CONFIG = {"size": (2304, 1746), "format": "XRGB8888"}
+STILL_CONFIG = {
+    "size": (2304, 1746),
+    "format": "XRGB8888",
+    "buffer_count": 1,
+    "queue": False
+}
 SNAPSHOT_INTERVAL = 60  # seconds
 PORT = 7123
 
@@ -368,9 +373,14 @@ class CameraManager:
                 self.picam2.start()
                 time.sleep(1.0)  # Increased wait time to ensure camera is fully started
                 
-                # Set focus to infinity (this often gives better results for fixed-focus cameras)
-                self.picam2.set_controls({"LensPosition": 0.0})
-                time.sleep(0.5)  # Give time for focus to adjust
+                # Set continuous auto-focus
+                self.picam2.set_controls({
+                    "AfMode": 2,  # Continuous auto-focus
+                    "AfRange": 0,  # Full range
+                    "AfSpeed": 0,  # Normal speed
+                    "AfTrigger": 0  # No trigger needed for continuous AF
+                })
+                time.sleep(1.0)  # Give time for focus to adjust
                 
                 # Verify camera is actually started
                 if not self.picam2.started:
