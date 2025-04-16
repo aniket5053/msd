@@ -407,7 +407,7 @@ class CameraManager:
                     array = request.make_array("main")
                     logging.info(f"Image array created with shape: {array.shape}")
                     
-                    # Convert to BGR and rotate 180 degrees
+                    # Convert to RGB and rotate 180 degrees
                     img = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
                     img = cv2.rotate(img, cv2.ROTATE_180)
                     
@@ -434,6 +434,9 @@ class CameraManager:
                     
                     # Turn off LEDs
                     dots.fill((0, 0, 0))
+                    
+                    # Convert back to BGR for saving
+                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                     
                     return img
                 except Exception as e:
