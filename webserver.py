@@ -264,13 +264,21 @@ class CameraManager:
                 return None
             
             try:
+                # Turn on LEDs for the capture
                 dots.fill((255, 255, 255))
+                time.sleep(0.1)  # Small delay to ensure LEDs are on
+                
                 request = self.picam2.capture_request()
                 img = cv2.cvtColor(request.make_array("main"), cv2.COLOR_RGB2BGR)
                 request.release()
-                return img
-            finally:
+                
+                # Turn off LEDs immediately after capture
                 dots.fill((0, 0, 0))
+                return img
+            except Exception as e:
+                logging.error(f"Error capturing still image: {str(e)}")
+                dots.fill((0, 0, 0))  # Ensure LEDs are turned off even if capture fails
+                return None
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
@@ -518,10 +526,12 @@ def snapshot_loop():
         
         try:
             if not camera_manager.switch_to_still():
+                logging.error("Failed to switch to still mode")
                 continue
                 
             img = camera_manager.capture_still()
             if img is None:
+                logging.error("Failed to capture still image")
                 continue
             
             # Add overlay
@@ -541,7 +551,13 @@ def snapshot_loop():
             os.makedirs(date_folder, exist_ok=True)
             
             filename = f"snapshot_{datetime.now().strftime('%H%M%S')}.jpg"
-            cv2.imwrite(os.path.join(date_folder, filename), img)
+            filepath = os.path.join(date_folder, filename)
+            
+            # Save the image
+            success = cv2.imwrite(filepath, img)
+            if not success:
+                logging.error(f"Failed to save image to {filepath}")
+                continue
             
             # Save metadata
             metadata = {
@@ -552,20 +568,25 @@ def snapshot_loop():
             }
             
             metadata_file = os.path.join(date_folder, "data.json")
-            if os.path.exists(metadata_file):
-                with open(metadata_file, "r") as f:
-                    existing = json.load(f)
-                existing.append(metadata)
-            else:
-                existing = [metadata]
-            
-            with open(metadata_file, "w") as f:
-                json.dump(existing, f)
+            try:
+                if os.path.exists(metadata_file):
+                    with open(metadata_file, "r") as f:
+                        existing = json.load(f)
+                    existing.append(metadata)
+                else:
+                    existing = [metadata]
+                
+                with open(metadata_file, "w") as f:
+                    json.dump(existing, f)
+                
+                logging.info(f"Successfully saved snapshot: {filename}")
+            except Exception as e:
+                logging.error(f"Error saving metadata: {str(e)}")
             
         except Exception as e:
-            logging.error("Snapshot error: %s", e)
+            logging.error(f"Snapshot error: {str(e)}")
         finally:
-            if streaming_enabled:  # Only switch back to video if streaming is enabled
+            if streaming_enabled:
                 camera_manager.switch_to_video()
 
 if __name__ == "__main__":
