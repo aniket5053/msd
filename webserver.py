@@ -22,7 +22,14 @@ from picamera2.outputs import FileOutput
 # Configuration
 SNAPSHOT_ROOT = "snapshots"
 STREAM_CONFIG = {"size": (640, 640), "format": "XRGB8888"}
-STILL_CONFIG = {"size": (2304, 1746), "format": "XRGB8888"}
+STILL_CONFIG = {
+    "size": (2304, 1746),
+    "format": "XRGB8888",
+    "sensor": {
+        "output_size": (2304, 1746),
+        "bit_depth": 10
+    }
+}
 SNAPSHOT_INTERVAL = 60  # seconds
 PORT = 7123
 
@@ -367,13 +374,6 @@ class CameraManager:
                 # Start the camera in still mode
                 self.picam2.start()
                 time.sleep(1.0)  # Increased wait time to ensure camera is fully started
-                
-                # Try to set focus to a fixed position that should work for most distances
-                try:
-                    self.picam2.set_controls({"LensPosition": 0.5})
-                    time.sleep(0.5)  # Give time for focus to adjust
-                except Exception as e:
-                    logging.warning(f"Could not set focus position: {str(e)}")
                 
                 # Verify camera is actually started
                 if not self.picam2.started:
