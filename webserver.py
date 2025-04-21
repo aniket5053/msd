@@ -711,86 +711,116 @@ def snapshot_loop():
     while True:
         time.sleep(60)  # Wait between snapshots (60 seconds total cycle)
         
-        # Turn on LEDs
-        dots.fill((255, 255, 255))
-        
-        # Manual focus adjustment
+        # Switch to still configuration before taking snapshot
         try:
-            # Start at infinity
-            picam2.set_controls({"LensPosition": 0.0})
-            time.sleep(0.5)
+            picam2.stop_recording()
+            picam2.configure(still_config)
+            picam2.start()
+            time.sleep(1.0)  # Wait for camera to stabilize
             
-            # Move to a reasonable focus distance
-            picam2.set_controls({"LensPosition": 0.3})
-            time.sleep(0.5)
+            # Turn on LEDs
+            dots.fill((255, 255, 255))
             
-            # Fine tune focus
-            picam2.set_controls({"LensPosition": 0.4})
-            time.sleep(0.5)
+            # Manual focus adjustment
+            try:
+                # Start at infinity
+                picam2.set_controls({"LensPosition": 0.0})
+                time.sleep(0.5)
+                
+                # Move to a reasonable focus distance
+                picam2.set_controls({"LensPosition": 0.3})
+                time.sleep(0.5)
+                
+                # Fine tune focus
+                picam2.set_controls({"LensPosition": 0.4})
+                time.sleep(0.5)
+                
+            except Exception as e:
+                logging.warning(f"Focus adjustment failed: {str(e)}")
+            
+            # Capture the image
+            request = picam2.capture_request()
+            img = request.make_array("main")
+            request.release()
+            
+            # Process the image
+            if img is not None:
+                # Convert to BGR for OpenCV
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                
+                # Add overlay text
+                with data_lock:
+                    if sensor_data:
+                        latest_sensor = sensor_data[-1]
+                    else:
+                        latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
+                
+                red_count = output.get_red_count()
+                overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+                cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+                
+                # Save the image
+                day_folder_name = time.strftime("%Y%m%d")
+                day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
+                os.makedirs(day_folder, exist_ok=True)
+                filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
+                file_path = os.path.join(day_folder, filename)
+                cv2.imwrite(file_path, img)
+                
+                # Save metadata
+                metadata_file = os.path.join(day_folder, "data.json")
+                record = {
+                    "timestamp": time.time(),
+                    "temperature": latest_sensor["temperature"],
+                    "humidity": latest_sensor["humidity"],
+                    "red_count": red_count,
+                    "filename": filename
+                }
+                if os.path.exists(metadata_file):
+                    try:
+                        with open(metadata_file, "r") as f:
+                            records = json.load(f)
+                    except Exception:
+                        records = []
+                else:
+                    records = []
+                records.append(record)
+                with open(metadata_file, "w") as f:
+                    json.dump(records, f)
+            
+            # Switch back to video configuration
+            picam2.stop()
+            picam2.configure(video_config)
+            picam2.start_recording(JpegEncoder(), FileOutput(output))
             
         except Exception as e:
-            logging.warning(f"Focus adjustment failed: {str(e)}")
-        
-        # Keep LEDs on for full duration
-        start_time = time.time()
-        while (time.time() - start_time) < FLASH_DURATION:
-            # Capture frame during illumination
-            with output.condition:
-                output.condition.wait()
-                frame_data = output.frame
-            # Small sleep to prevent tight loop
-            time.sleep(0.01)
+            logging.error(f"Error during snapshot: {str(e)}")
+            # Try to recover video configuration
+            try:
+                picam2.stop()
+                picam2.configure(video_config)
+                picam2.start_recording(JpegEncoder(), FileOutput(output))
+            except Exception as e2:
+                logging.error(f"Failed to recover video configuration: {str(e2)}")
         
         # Turn off LEDs
         dots.fill((0, 0, 0))
-        
-        # Process the LAST captured frame
-        if frame_data is None:
-            continue
-        img = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if img is None:
-            continue
-        
-        # Rest of processing remains the same...
-        with data_lock:
-            if sensor_data:
-                latest_sensor = sensor_data[-1]
-            else:
-                latest_sensor = {"temperature": 0, "humidity": 0, "time": time.time()}
-        red_count = output.get_red_count()
-        overlay_text = f"Temp: {latest_sensor['temperature']:.1f} F, Hum: {latest_sensor['humidity']:.1f}%, Red Dots: {red_count}"
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-        day_folder_name = time.strftime("%Y%m%d")
-        day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
-        os.makedirs(day_folder, exist_ok=True)
-        filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
-        file_path = os.path.join(day_folder, filename)
-        cv2.imwrite(file_path, img)
-        metadata_file = os.path.join(day_folder, "data.json")
-        record = {
-            "timestamp": time.time(),
-            "temperature": latest_sensor["temperature"],
-            "humidity": latest_sensor["humidity"],
-            "red_count": red_count,
-            "filename": filename
-        }
-        if os.path.exists(metadata_file):
-            try:
-                with open(metadata_file, "r") as f:
-                    records = json.load(f)
-            except Exception:
-                records = []
-        else:
-            records = []
-        records.append(record)
-        with open(metadata_file, "w") as f:
-            json.dump(records, f)
 
 # Initialize camera with square aspect ratio
 picam2 = Picamera2()
-config = picam2.create_still_configuration(
+
+# Create video configuration for streaming
+video_config = picam2.create_video_configuration(
+    main={
+        "size": (2304, 1296),
+        "format": "XRGB8888"
+    }
+)
+
+# Create still configuration for snapshots
+still_config = picam2.create_still_configuration(
     main={
         "size": (2304, 1296),
         "format": "XRGB8888"
@@ -810,7 +840,9 @@ config = picam2.create_still_configuration(
         "ScalerCrop": (0, 0, 2304, 1296)  # Full sensor area
     }
 )
-picam2.configure(config)
+
+# Configure camera with video settings first
+picam2.configure(video_config)
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
