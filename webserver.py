@@ -721,20 +721,19 @@ def snapshot_loop():
             # Turn on LEDs
             dots.fill((255, 255, 255))
             
-            # Manual focus adjustment
+            # Trigger auto focus
             try:
-                # Start at infinity
-                picam2.set_controls({"LensPosition": 0.0})
-                time.sleep(0.5)
+                picam2.set_controls({"AfTrigger": 0})
+                time.sleep(4.0)  # Give time for focus to complete
                 
-                # Move to a reasonable focus distance
-                picam2.set_controls({"LensPosition": 0.3})
-                time.sleep(0.5)
-                
-                # Fine tune focus
-                picam2.set_controls({"LensPosition": 0.4})
-                time.sleep(0.5)
-                
+                # Optional: Check focus status
+                try:
+                    controls = picam2.camera_controls
+                    if 'AfState' in controls:
+                        logging.info("Focus state: %s", controls['AfState'])
+                except Exception as e:
+                    logging.warning(f"Could not check focus state: {str(e)}")
+                    
             except Exception as e:
                 logging.warning(f"Focus adjustment failed: {str(e)}")
             
@@ -826,8 +825,7 @@ still_config = picam2.create_still_configuration(
         "format": "XRGB8888"
     },
     controls={
-        "AfMode": 0,  # Manual focus mode
-        "LensPosition": 0.0,  # Start at infinity
+        "AfMode": 1,  # Auto focus mode
         "FrameDurationLimits": (33333, 33333),  # 30fps
         "NoiseReductionMode": 2,  # High quality noise reduction
         "AwbMode": 0,  # Auto white balance
