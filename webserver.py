@@ -714,13 +714,24 @@ def snapshot_loop():
         # Turn on LEDs
         dots.fill((255, 255, 255))
         
-        # Set focus before capture
+        # Set focus before capture with longer wait times
         try:
-            picam2.set_controls({
-                "AfMode": 1,  # Auto focus mode
-                "AfTrigger": 0  # Start AF
-            })
-            time.sleep(1.5)  # Wait for focus to complete
+            # First set auto focus mode
+            picam2.set_controls({"AfMode": 1})
+            time.sleep(1.0)  # Wait for mode to set
+            
+            # Trigger auto focus
+            picam2.set_controls({"AfTrigger": 0})
+            time.sleep(4.0)  # Give more time for focus to complete
+            
+            # Optional: Check focus status if available
+            try:
+                controls = picam2.camera_controls
+                if 'AfState' in controls:
+                    logging.info("Focus state: %s", controls['AfState'])
+            except Exception as e:
+                logging.warning(f"Could not check focus state: {str(e)}")
+                
         except Exception as e:
             logging.warning(f"Focus adjustment failed: {str(e)}")
         
@@ -757,7 +768,7 @@ def snapshot_loop():
         cv2.putText(img, timestamp, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
         day_folder_name = time.strftime("%Y%m%d")
         day_folder = os.path.join(SNAPSHOT_ROOT, day_folder_name)
-        os.makedirs(day_folder, exist_ok=True)``
+        os.makedirs(day_folder, exist_ok=True)
         filename = f"snapshot_{time.strftime('%H%M%S')}.jpg"
         file_path = os.path.join(day_folder, filename)
         cv2.imwrite(file_path, img)
