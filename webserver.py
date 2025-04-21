@@ -714,24 +714,20 @@ def snapshot_loop():
         # Turn on LEDs
         dots.fill((255, 255, 255))
         
-        # Set focus before capture with longer wait times
+        # Manual focus adjustment
         try:
-            # First set auto focus mode
-            picam2.set_controls({"AfMode": 1})
-            time.sleep(1.0)  # Wait for mode to set
+            # Start at infinity
+            picam2.set_controls({"LensPosition": 0.0})
+            time.sleep(0.5)
             
-            # Trigger auto focus
-            picam2.set_controls({"AfTrigger": 0})
-            time.sleep(4.0)  # Give more time for focus to complete
+            # Move to a reasonable focus distance
+            picam2.set_controls({"LensPosition": 0.3})
+            time.sleep(0.5)
             
-            # Optional: Check focus status if available
-            try:
-                controls = picam2.camera_controls
-                if 'AfState' in controls:
-                    logging.info("Focus state: %s", controls['AfState'])
-            except Exception as e:
-                logging.warning(f"Could not check focus state: {str(e)}")
-                
+            # Fine tune focus
+            picam2.set_controls({"LensPosition": 0.4})
+            time.sleep(0.5)
+            
         except Exception as e:
             logging.warning(f"Focus adjustment failed: {str(e)}")
         
@@ -794,10 +790,26 @@ def snapshot_loop():
 
 # Initialize camera with square aspect ratio
 picam2 = Picamera2()
-config = picam2.create_video_configuration({
-    'size': (2304, 1296),
-    'format': 'XRGB8888'
-})
+config = picam2.create_still_configuration(
+    main={
+        "size": (2304, 1296),
+        "format": "XRGB8888"
+    },
+    controls={
+        "AfMode": 0,  # Manual focus mode
+        "LensPosition": 0.0,  # Start at infinity
+        "FrameDurationLimits": (33333, 33333),  # 30fps
+        "NoiseReductionMode": 2,  # High quality noise reduction
+        "AwbMode": 0,  # Auto white balance
+        "AeEnable": True,  # Auto exposure
+        "AeMeteringMode": 0,  # Centre weighted
+        "AeExposureMode": 0,  # Normal exposure
+        "AeConstraintMode": 0,  # Normal constraint
+        "AeFlickerMode": 0,  # Auto flicker
+        "AeFlickerPeriod": 10000,  # 50Hz
+        "ScalerCrop": (0, 0, 2304, 1296)  # Full sensor area
+    }
+)
 picam2.configure(config)
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
