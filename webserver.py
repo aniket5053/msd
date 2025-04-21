@@ -21,14 +21,10 @@ from picamera2.outputs import FileOutput
 
 # Configuration
 SNAPSHOT_ROOT = "snapshots"
-STREAM_CONFIG = {"size": (640, 640), "format": "XRGB8888"}
+# STREAM_CONFIG = {"size": (640, 640), "format": "XRGB8888"}
 STILL_CONFIG = {
-    "size": (2304, 1746),
-    "format": "XRGB8888",
-    "sensor": {
-        "output_size": (2304, 1746),
-        "bit_depth": 10
-    }
+    "size": (2304, 1296),
+    "format": "XRGB8888"
 }
 SNAPSHOT_INTERVAL = 60  # seconds
 PORT = 7123
@@ -39,7 +35,7 @@ sht = adafruit_sht4x.SHT4x(board.I2C())
 dots = dotstar.DotStar(board.SCK, board.MOSI, 4, brightness=0.2)
 
 # Global state
-streaming_enabled = True
+# streaming_enabled = True
 sensor_data = deque(maxlen=86400)
 data_lock = Lock()
 camera_lock = RLock()
@@ -190,11 +186,6 @@ PAGE = """\
                 document.getElementById('hum').textContent = latest.humidity.toFixed(1);
             }
         });
-        fetch('/count')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('red-count').textContent = data.count;
-        });
     }
     function initChart() {
         const ctx = document.getElementById('sensorChart').getContext('2d');
@@ -266,14 +257,6 @@ PAGE = """\
             sensorChart.update();
         });
     }
-    function toggleStream() {
-        fetch('/toggle')
-        .then(response => response.json())
-        .then(data => {
-            const btn = document.getElementById('toggleStreamBtn');
-            btn.textContent = data.streaming ? "Disable Stream" : "Enable Stream";
-        });
-    }
     window.addEventListener('load', () => {
         initChart();
         setInterval(updateMetrics, 1000);
@@ -305,15 +288,7 @@ PAGE = """\
                     </svg>
                     <span id="hum">-</span>%
                 </div>
-                <div class="metric red">
-                    <svg class="metric-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12,2A10,10 0 0,0 2,12"/>
-                    </svg>
-                    <span id="red-count">0</span>
-                </div>
-                <button id="toggleStreamBtn" onclick="toggleStream()">Disable Stream</button>
             </div>
-            <img class="video-feed" src="stream.mjpg" />
         </div>
         <div class="graph-section">
             <div class="chart-container">
@@ -331,31 +306,31 @@ PAGE = """\
 class CameraManager:
     def __init__(self):
         self.picam2 = Picamera2()
-        self.output = StreamingOutput()
+        # self.output = StreamingOutput()
         self.current_mode = None
         
         # Initialize both configurations
-        self.video_config = self.picam2.create_video_configuration(main=STREAM_CONFIG)
-        self.still_config = self.picam2.create_still_configuration(main=STILL_CONFIG)
+        # self.video_config = self.picam2.create_video_configuration(main=STREAM_CONFIG)
+        self.still_config = self.picam2.create_still_configuration()
         
         # Start with video mode
-        self.switch_to_video()
+        # self.switch_to_video()
 
-    def switch_to_video(self):
-        with camera_lock:
-            if self.current_mode == "video":
-                return
+    # def switch_to_video(self):
+    #     with camera_lock:
+    #         if self.current_mode == "video":
+    #             return
             
-            try:
-                if self.picam2.started:
-                    self.picam2.stop_recording()
-                self.picam2.configure(self.video_config)
-                self.picam2.start_recording(JpegEncoder(), FileOutput(self.output))
-                self.current_mode = "video"
-                logging.info("Successfully switched to video mode")
-            except Exception as e:
-                logging.error(f"Video mode switch failed: {str(e)}")
-                raise
+    #         try:
+    #             if self.picam2.started:
+    #                 self.picam2.stop_recording()
+    #             self.picam2.configure(self.video_config)
+    #             self.picam2.start_recording(JpegEncoder(), FileOutput(self.output))
+    #             self.current_mode = "video"
+    #             logging.info("Successfully switched to video mode")
+    #         except Exception as e:
+    #             logging.error(f"Video mode switch failed: {str(e)}")
+    #             raise
 
     def switch_to_still(self):
         with camera_lock:
@@ -460,55 +435,55 @@ class CameraManager:
                 dots.fill((0, 0, 0))  # Ensure LEDs are turned off even if capture fails
                 return None
 
-class StreamingOutput(io.BufferedIOBase):
-    def __init__(self):
-        self.frame = None
-        self.condition = Condition()
-        self.red_count = 0
-        self.active = True
+# class StreamingOutput(io.BufferedIOBase):
+#     def __init__(self):
+#         self.frame = None
+#         self.condition = Condition()
+#         self.red_count = 0
+#         self.active = True
 
-    def write(self, buf):
-        if not self.active or not streaming_enabled:
-            return
+#     def write(self, buf):
+#         if not self.active or not streaming_enabled:
+#             return
         
-        try:
-            img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_COLOR)
-            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+#         try:
+#             img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_COLOR)
+#             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             
-            # Red detection
-            lower_red = np.array([0, 120, 70])
-            upper_red = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 120, 70])
-            upper_red2 = np.array([180, 255, 255])
+#             # Red detection
+#             lower_red = np.array([0, 120, 70])
+#             upper_red = np.array([10, 255, 255])
+#             lower_red2 = np.array([170, 120, 70])
+#             upper_red2 = np.array([180, 255, 255])
             
-            mask = cv2.bitwise_or(
-                cv2.inRange(hsv, lower_red, upper_red),
-                cv2.inRange(hsv, lower_red2, upper_red2)
-            )
+#             mask = cv2.bitwise_or(
+#                 cv2.inRange(hsv, lower_red, upper_red),
+#                 cv2.inRange(hsv, lower_red2, upper_red2)
+#             )
             
-            self.red_count = 0
-            for contour in cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]:
-                if cv2.contourArea(contour) > 500:
-                    self.red_count += 1
-                    x, y, w, h = cv2.boundingRect(contour)
-                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+#             self.red_count = 0
+#             for contour in cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]:
+#                 if cv2.contourArea(contour) > 500:
+#                     self.red_count += 1
+#                     x, y, w, h = cv2.boundingRect(contour)
+#                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
             
-            # Flip the image horizontally and rotate 180 degrees
-            img = cv2.flip(img, 1)  # Horizontal flip
-            img = cv2.rotate(img, cv2.ROTATE_180)  # 180 degree rotation
+#             # Flip the image horizontally and rotate 180 degrees
+#             img = cv2.flip(img, 1)  # Horizontal flip
+#             img = cv2.rotate(img, cv2.ROTATE_180)  # 180 degree rotation
             
-            _, jpeg = cv2.imencode('.jpg', img)
-            buf = jpeg.tobytes()
-        except Exception as e:
-            logging.error("Frame processing error: %s", e)
-            return
+#             _, jpeg = cv2.imencode('.jpg', img)
+#             buf = jpeg.tobytes()
+#         except Exception as e:
+#             logging.error("Frame processing error: %s", e)
+#             return
         
-        with self.condition:
-            self.frame = buf
-            self.condition.notify_all()
+#         with self.condition:
+#             self.frame = buf
+#             self.condition.notify_all()
 
-    def get_red_count(self):
-        return self.red_count
+#     def get_red_count(self):
+#         return self.red_count
 
 class StreamingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -517,14 +492,14 @@ class StreamingHandler(BaseHTTPRequestHandler):
                 self.send_redirect('/index.html')
             elif self.path == '/index.html':
                 self.serve_html()
-            elif self.path == '/stream.mjpg':
-                self.serve_stream()
+            # elif self.path == '/stream.mjpg':
+            #     self.serve_stream()
             elif self.path == '/sensors':
                 self.serve_sensor_data()
-            elif self.path == '/count':
-                self.serve_red_count()
-            elif self.path == '/toggle':
-                self.toggle_stream()
+            # elif self.path == '/count':
+            #     self.serve_red_count()
+            # elif self.path == '/toggle':
+            #     self.toggle_stream()
             elif self.path == '/snapshots':
                 self.serve_snapshots()
             elif self.path.startswith('/snapshot/'):
@@ -541,28 +516,28 @@ class StreamingHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(PAGE.encode())
 
-    def serve_stream(self):
-        self.send_response(200)
-        self.send_header('Age', '0')
-        self.send_header('Cache-Control', 'no-cache, private')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-        self.end_headers()
+    # def serve_stream(self):
+    #     self.send_response(200)
+    #     self.send_header('Age', '0')
+    #     self.send_header('Cache-Control', 'no-cache, private')
+    #     self.send_header('Pragma', 'no-cache')
+    #     self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
+    #     self.end_headers()
         
-        try:
-            while True:
-                with camera_manager.output.condition:
-                    camera_manager.output.condition.wait()
-                    frame = camera_manager.output.frame
+    #     try:
+    #         while True:
+    #             with camera_manager.output.condition:
+    #                 camera_manager.output.condition.wait()
+    #                 frame = camera_manager.output.frame
                 
-                self.wfile.write(b'--FRAME\r\n')
-                self.send_header('Content-Type', 'image/jpeg')
-                self.send_header('Content-Length', len(frame))
-                self.end_headers()
-                self.wfile.write(frame)
-                self.wfile.write(b'\r\n')
-        except Exception as e:
-            logging.warning("Stream closed: %s", e)
+    #             self.wfile.write(b'--FRAME\r\n')
+    #             self.send_header('Content-Type', 'image/jpeg')
+    #             self.send_header('Content-Length', len(frame))
+    #             self.end_headers()
+    #             self.wfile.write(frame)
+    #             self.wfile.write(b'\r\n')
+    #     except Exception as e:
+    #         logging.warning("Stream closed: %s", e)
 
     def serve_sensor_data(self):
         with data_lock:
@@ -570,24 +545,24 @@ class StreamingHandler(BaseHTTPRequestHandler):
             data = {
                 "temperature": latest["temperature"],
                 "humidity": latest["humidity"],
-                "count": camera_manager.output.get_red_count(),
+                # "count": camera_manager.output.get_red_count(),
                 "history": list(sensor_data)[-100:]
             }
         self.send_json(data)
 
-    def serve_red_count(self):
-        count = camera_manager.output.get_red_count()
-        self.send_json({"count": count})
+    # def serve_red_count(self):
+    #     count = camera_manager.output.get_red_count()
+    #     self.send_json({"count": count})
 
-    def toggle_stream(self):
-        global streaming_enabled
-        streaming_enabled = not streaming_enabled
-        if streaming_enabled:
-            dots.fill((255, 255, 255))  # Turn LEDs on
-            camera_manager.switch_to_video()  # Ensure camera is in video mode
-        else:
-            dots.fill((0, 0, 0))  # Turn LEDs off
-        self.send_json({"success": True})
+    # def toggle_stream(self):
+    #     global streaming_enabled
+    #     streaming_enabled = not streaming_enabled
+    #     if streaming_enabled:
+    #         dots.fill((255, 255, 255))  # Turn LEDs on
+    #         camera_manager.switch_to_video()  # Ensure camera is in video mode
+    #     else:
+    #         dots.fill((0, 0, 0))  # Turn LEDs off
+    #     self.send_json({"success": True})
 
     def serve_snapshots(self):
         html = """<html><head>
@@ -777,9 +752,10 @@ def snapshot_loop():
         except Exception as e:
             logging.error(f"Snapshot error: {str(e)}")
         finally:
-            if streaming_enabled:
-                logging.info("Switching back to video mode")
-                camera_manager.switch_to_video()
+            # if streaming_enabled:
+            #     logging.info("Switching back to video mode")
+            #     camera_manager.switch_to_video()
+            pass
 
 if __name__ == "__main__":
     logging.basicConfig(
