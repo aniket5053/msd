@@ -383,8 +383,8 @@ class StreamingOutput(io.BufferedIOBase):
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 2)
             
-            # Flip the image horizontally
-            img = cv2.flip(img, 1)
+            # Flip the image 180 degrees
+            img = cv2.rotate(img, cv2.ROTATE_180)
             
             _, jpeg = cv2.imencode('.jpg', img)
             buf = jpeg.tobytes()
